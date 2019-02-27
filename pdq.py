@@ -4,7 +4,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 from scipy.stats import gmean
 from multiprocessing import Pool
-# from tqdm import tqdm
+from tqdm import tqdm
 
 
 _SMALL_VAL = 1e-14
@@ -79,7 +79,9 @@ class PDQ(object):
         self.reset()
         pool = Pool(processes=6)
 
-        for img_results in pool.imap(_get_image_evals, pdq_param_lists):
+        num_imgs = len(pdq_param_lists)
+        for img_results in tqdm(pool.imap(_get_image_evals, pdq_param_lists),
+                                total=num_imgs, desc='PDQ Images'):
             self._tot_overall_quality += img_results['overall']
             self._tot_spatial_quality += img_results['spatial']
             self._tot_label_quality += img_results['label']

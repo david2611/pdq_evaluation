@@ -7,6 +7,8 @@ from pdq import PDQ
 from coco_mAP import coco_mAP
 import json
 import numpy as np
+import rvc1_gt_loader
+import rvc1_class_list
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--test_set', default='coco', help='define if we are testing on coco or rvc1 data')
@@ -23,6 +25,7 @@ args = parser.parse_args()
 # Define these before using this code
 coco_gt_file = '/mnt/storage_device/Datasets/COCO/annotations/instances_val2014.json'
 rvc1_gt_folder = '/mnt/storage_device/Datasets/rvc_challenge1/validation_data/ground_truth'
+
 
 class ParamSequenceHolder:
     def __init__(self, gt_instances_lists, det_instances_lists, filter_gt):
@@ -43,14 +46,15 @@ class ParamSequenceHolder:
 
     def __iter__(self):
         for idx in range(len(self._gt_instances_lists)):
-            gt_list = list(self._gt_instances_lists[idx])
-            det_list = list(self._det_instances_lists[idx])
+            gt_list = self._gt_instances_lists[idx]
+            det_list = self._det_instances_lists[idx]
             if len(gt_list) != len(det_list):
+                print("ERROR! gt_list and det_list for sequence {0} not the same length".format(idx))
+                print("len GT: {0}\nlen Det: {1}".format(len(gt_list), len(det_list)))
                 sys.exit("ERROR! gt_list and det_list for sequence {0} not the same length".format(idx))
             for frame_gt, frame_detections in zip(gt_list, det_list):
                 ground_truth = list(frame_gt)
                 detections = list(frame_detections)
-
                 yield ground_truth, detections, self._filter_gt
 
 
@@ -70,9 +74,13 @@ def gen_param_sequence():
         filter_gt = False
 
     elif args.test_set == 'rvc1':
-        # TODO setup to run for rvc1 on same code base
+        all_det_instances = []
+        # output is a list of generator of generators or GTInstance objects
+        all_gt_instances = rvc1_gt_loader.read_ground_truth(rvc1_gt_folder)
+        for det_filename in sorted(glob.glob(os.path.join(args.det_folder, "*.json"))):
+            # output is generator of lists of DetectionInstance objects (BBox or PBox depending)
+            all_det_instances.append(read_files.read_pbox_json(det_filename, rvc1_class_list.CLASS_IDS))
         filter_gt = True
-        pass
 
     else:
         sys.exit("ERROR! Invalid test_set parameter (must be 'coco' or 'rvc1')")
@@ -86,9 +94,10 @@ def main():
     if not os.path.isdir(args.save_folder):
         os.makedirs(args.save_folder)
 
+    print("Extracting GT and Detections")
     param_sequence = gen_param_sequence()
 
-    # TODO include mAP calculation
+    print("Calculating PDQ")
     # Get summary statistics (PDQ, avg_qualities, mAP)
     evaluator = PDQ()
     score = evaluator.score(param_sequence)
@@ -98,7 +107,10 @@ def main():
     avg_overall_quality = evaluator.get_avg_overall_quality_score()
 
     # TODO check mAP is actually working as expected (same results as would get normally)
-    mAP = coco_mAP(param_sequence)
+    if args.mAP_heatmap:
+        mAP = coco_mAP(param_sequence, use_heatmap=True)
+    else:
+        mAP = coco_mAP(param_sequence, use_heatmap=False)
 
     result = {"score": score*100, "avg_pPDQ": avg_overall_quality, "avg_spatial": avg_spatial_quality,
               "avg_label": avg_label_quality, "TP": TP, "FP": FP, "FN": FN, 'mAP': mAP}
