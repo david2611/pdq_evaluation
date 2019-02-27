@@ -9,6 +9,9 @@ import json
 import numpy as np
 import rvc1_gt_loader
 import rvc1_class_list
+import rvc1_submission_loader
+
+_NUM_VALID = 4
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--test_set', default='coco', help='define if we are testing on coco or rvc1 data')
@@ -74,12 +77,14 @@ def gen_param_sequence():
         filter_gt = False
 
     elif args.test_set == 'rvc1':
-        all_det_instances = []
         # output is a list of generator of generators or GTInstance objects
         all_gt_instances = rvc1_gt_loader.read_ground_truth(rvc1_gt_folder)
-        for det_filename in sorted(glob.glob(os.path.join(args.det_folder, "*.json"))):
-            # output is generator of lists of DetectionInstance objects (BBox or PBox depending)
-            all_det_instances.append(read_files.read_pbox_json(det_filename, rvc1_class_list.CLASS_IDS))
+        all_det_instances = rvc1_submission_loader.read_submission(args.det_folder,
+                                                                   ["{0:06d}".format(idx) for idx in range(_NUM_VALID)])
+        # all_det_instances = []
+        # for det_filename in sorted(glob.glob(os.path.join(args.det_folder, "*.json"))):
+        #     # output is generator of lists of DetectionInstance objects (BBox or PBox depending)
+        #     all_det_instances.append(read_files.read_pbox_json(det_filename, rvc1_class_list.CLASS_IDS))
         filter_gt = True
 
     else:
@@ -107,6 +112,7 @@ def main():
     avg_overall_quality = evaluator.get_avg_overall_quality_score()
 
     # TODO check mAP is actually working as expected (same results as would get normally)
+    print("Calculating mAP")
     if args.mAP_heatmap:
         mAP = coco_mAP(param_sequence, use_heatmap=True)
     else:
