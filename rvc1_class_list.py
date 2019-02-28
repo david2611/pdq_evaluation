@@ -82,6 +82,10 @@ def get_class_id(class_name):
     return None
 
 
+def get_class_name(class_id):
+    return CLASSES[class_id]
+
+
 def get_nearest_class(potential_class_name):
     """
     Given a string that might be a class name,

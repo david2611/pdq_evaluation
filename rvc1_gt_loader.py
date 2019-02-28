@@ -9,7 +9,7 @@ import data_holders
 import rvc1_class_list
 
 
-def read_ground_truth(directory):
+def read_ground_truth(directory, one_sequence=False):
     """
     Read all the ground truth from all the sequences in the given folder.
     Each sequence is a folder containing a json file and some number of mask images
@@ -30,6 +30,8 @@ def read_ground_truth(directory):
     :param directory: location of root directory where folders containing sequence's gt data are located
     :return: sequences: dictionary of sequence gt generators
     """
+    if one_sequence:
+        sequences = [SequenceGTLoader(directory)]
     sequences = []
     for sequence_dir in sorted(os.listdir(directory)):
         sequence_path = os.path.join(directory, sequence_dir)

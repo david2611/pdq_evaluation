@@ -358,8 +358,9 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
                 gt_eval_dict = {"det_id": None, "gt_id": gt_idx, "ignore": False, "matched": False,
                                 "pPDQ": 0.0, "spatial": 0.0, "label": 0.0}
                 if _is_gt_included(gt_instance, filter_gt):
-                    gt_eval_dict["ignore"] = True
                     FN += 1
+                else:
+                    gt_eval_dict["ignore"] = True
                 img_gt_evals.append(gt_eval_dict)
 
         return {'overall': 0.0, 'spatial': 0.0, 'label': 0.0, 'TP': 0, 'FP': len(det_instances),
