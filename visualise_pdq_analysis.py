@@ -14,6 +14,7 @@ from copy import copy
 import matplotlib.patches as patches
 import utils
 from data_holders import PBoxDetInst
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--ground_truth', help='file or folder location where ground-truth is kept')
@@ -26,6 +27,7 @@ parser.add_argument('--img_type', help='type of image in gt_img_folder (png or j
 parser.add_argument('--save_folder', help='location where all analysis images will be stored')
 parser.add_argument('--full_info', action='store_true', help='flag for stating if all pPDQ information should be'
                                                              'displayed as part of the figure.')
+parser.add_argument('--set_cov', type=float, help='set covariance for all gt corners')
 args = parser.parse_args()
 
 if not os.path.isdir(args.save_folder):
@@ -52,10 +54,10 @@ def load_gt_and_det_data(gt_loc, det_json, data_type):
     """
     if data_type == 'coco':
         # output is a generator of lists of GTInstance objects and a map of gt_class_ids
-        gt_instances, gt_class_ids_map = read_files.read_COCO_gt(gt_loc, ret_classes=True, n_imgs=100)
+        gt_instances, gt_class_ids_map = read_files.read_COCO_gt(gt_loc, ret_classes=True)
 
         # output is a generator of lists of DetectionInstance objects (BBox or PBox depending)
-        det_instances = read_files.read_pbox_json(det_json, gt_class_ids_map, n_imgs=100)
+        det_instances = read_files.read_pbox_json(det_json, gt_class_ids_map, override_cov=args.set_cov)
         class_idxs = [gt_class_ids_map[key] for key in sorted(gt_class_ids_map.keys())]
         class_names = list(sorted(gt_class_ids_map.keys()))
         class_list = [class_names[idx] for idx in np.argsort(class_idxs)]
@@ -80,6 +82,8 @@ def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_anal
     b, g, r = cv2.split(img)
     img = cv2.merge([r, g, b])
     ratio = img.shape[0]/float(img.shape[1])
+    # Set savefile image to be 12 inches max dimension
+    # TODO find some way of returning to original image size? Looks good this way though
     if ratio <= 1:
         fig_size = (12, 12*ratio)
     else:
@@ -140,7 +144,7 @@ def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_anal
 
         # Write text
         if det_analysis['matched'] and full_info:
-            correct_class = class_list[np.argwhere(np.isclose(det_inst.class_list, det_analysis['label']))[0][0]]
+            correct_class = class_list[det_analysis['correct_class']]
             max_class = class_list[np.argmax(det_inst.class_list)]
             det_str = '[{0}]: {1} pPDQ: {2:.3f}' \
                       '\nspatial: {3:.3f}' \
@@ -151,7 +155,12 @@ def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_anal
 
         else:
             max_class = class_list[np.argmax(det_inst.class_list)]
-            det_str = '[{0}]: {1} {2:.3f}'.format(det_idx, max_class, np.amax(det_inst.class_list))
+            max_score = np.amax(det_inst.class_list)
+            # Make detections with limited written information state their max non-none class
+            if max_class == 'none':
+                max_class = class_list[np.argsort(det_inst.class_list)[-2]]
+                max_score = det_inst.class_list[np.argsort(det_inst.class_list)[-2]]
+            det_str = '[{0}]: {1} {2:.3f}'.format(det_idx, max_class, max_score)
 
         ax.text(det_box[0], det_box[1], det_str, horizontalalignment='left',
                 verticalalignment='top', bbox=dict(facecolor='white', alpha=0.3))
@@ -162,8 +171,6 @@ def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_anal
     plt.axis('off')
     plt.savefig(save_file, dpi=100)
     plt.close()
-
-
 
 
 def main():
@@ -188,7 +195,10 @@ def main():
     img_data_sequence = zip(sorted(glob.glob(os.path.join(args.gt_img_folder, '*.'+args.img_type))),
                             gt_instances, det_instances, gt_analysis, det_analysis)
     # Go over each image and draw appropriate
-    for img_name, img_gts, img_dets, img_gt_analysis, img_det_analysis in img_data_sequence:
+    for img_name, img_gts, img_dets, img_gt_analysis, img_det_analysis in tqdm(img_data_sequence,
+                                                                               total=len(gt_analysis),
+                                                                               desc='image drawing'
+                                                                               ):
         save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_analysis, class_list, args.save_folder,
                           args.full_info)
 

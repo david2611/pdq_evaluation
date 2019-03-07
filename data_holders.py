@@ -10,14 +10,18 @@ _SMALL_VAL = 1e-14
 
 
 class GroundTruthInstance(object):
-    def __init__(self, segmentation_mask, true_class_label, bounding_box=None, num_pixels=None):
+    def __init__(self, segmentation_mask, true_class_label, coco_bounding_box=None, num_pixels=None,
+                 coco_ignore=False, coco_iscrowd=False, coco_area=None):
         self.segmentation_mask = segmentation_mask
         self.class_label = true_class_label
-
-        if bounding_box is not None and len(bounding_box) > 0:
-            self.bounding_box = bounding_box
+        self.coco_ignore = coco_ignore
+        self.coco_iscrowd = coco_iscrowd
+        self.coco_area = coco_area
+        self.bounding_box = utils.generate_bounding_box_from_mask(segmentation_mask)
+        if coco_bounding_box is not None and len(coco_bounding_box) > 0:
+            self.coco_bounding_box = coco_bounding_box
         else:
-            self.bounding_box = utils.generate_bounding_box_from_mask(segmentation_mask)
+            self.coco_bounding_box = self.bounding_box.copy()
         if num_pixels is not None and num_pixels > 0:
             self.num_pixels = num_pixels
         else:

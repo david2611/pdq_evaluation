@@ -3,6 +3,7 @@ import utils
 import sys
 from data_holders import PBoxDetInst, BBoxDetInst
 # TODO update to be less of a hack
+# Temp way to get access to COCO code for now
 sys.path.append('/home/davidhall/Documents/postdoc_2018-2020/projects/rvc_new_metrics_sandbox/sandbox/'
                 'evaluator_tools/metric_downloaded_code/cocoapi/PythonAPI/')
 from pycocotools.cocoeval import COCOeval
@@ -48,16 +49,12 @@ def coco_mAP(param_sequence, use_heatmap=True):
         #     print('Img IDX: {0}'.format(img_idx))
         # Handle images with no gt instances
         if len(img_gt_instances) == 0:
-            if len(img_det_instances) == 0:
-                coco_img_ids += [-1]
-                continue
-            else:
-                # Add the image to the list
-                coco_gt_dict['images'].append({'id': img_idx + 1,
-                                               'height': _BLANK_IMG_SHAPE[0],
-                                               'file_name': '{}.jpg'.format(img_idx + 1),
-                                               'width': _BLANK_IMG_SHAPE[1]})
-                coco_img_ids += [img_idx + 1]
+            # Add blank image to the list
+            coco_gt_dict['images'].append({'id': img_idx + 1,
+                                           'height': _BLANK_IMG_SHAPE[0],
+                                           'file_name': '{}.jpg'.format(img_idx + 1),
+                                           'width': _BLANK_IMG_SHAPE[1]})
+            coco_img_ids += [img_idx + 1]
         else:
             # Add the image to the list
             coco_gt_dict['images'].append({'id': img_idx + 1,
@@ -76,14 +73,16 @@ def coco_mAP(param_sequence, use_heatmap=True):
                                                        "id": gt_instance.class_label+1})
 
                 # Add annotation to coco_gt_dict
-                coco_gt_box = gt_instance.bounding_box.copy()
+                coco_gt_box = [float(box_val) for box_val in gt_instance.coco_bounding_box]
                 coco_gt_box[2] -= coco_gt_box[0]
                 coco_gt_box[3] -= coco_gt_box[1]
-                coco_gt_dict['annotations'].append({'bbox': coco_gt_box, 'iscrowd': 0,
+                coco_gt_dict['annotations'].append({'bbox': coco_gt_box,
+                                                    'iscrowd': gt_instance.coco_iscrowd,
+                                                    'ignore': gt_instance.coco_ignore,
                                                     'category_id': gt_instance.class_label+1,
                                                     'image_id': img_idx+1,
                                                     'id': current_ann_id,
-                                                    'area': coco_gt_box[2]*coco_gt_box[3]})
+                                                    'area': gt_instance.coco_area})
                 coco_ann_ids[img_idx] += [current_ann_id]
                 current_ann_id += 1
 
@@ -91,14 +90,14 @@ def coco_mAP(param_sequence, use_heatmap=True):
         # Create coco detections for each detection in this image
         for det_idx, det_instance in enumerate(img_det_instances):
             # print('Det IDX: {0}'.format(det_idx))
-            coco_det_class = det_instance.get_max_class()+1
-            coco_det_score = det_instance.get_max_score()
+            coco_det_class = int(det_instance.get_max_class()+1)
+            coco_det_score = float(det_instance.get_max_score())
             coco_det_img = img_idx+1
             if use_heatmap:
                 coco_det_box = utils.generate_bounding_box_from_mask(det_instance.calc_heatmap(img_gt_instances[0].segmentation_mask.shape) > _HEATMAP_THRESH)
             else:
                 if isinstance(det_instance, PBoxDetInst) or isinstance(det_instance, BBoxDetInst):
-                    coco_det_box = det_instance.box.copy()
+                    coco_det_box = [float(boxval) for boxval in det_instance.box]
             coco_det_box[2] -= coco_det_box[0]
             coco_det_box[3] -= coco_det_box[1]
 
@@ -108,16 +107,31 @@ def coco_mAP(param_sequence, use_heatmap=True):
 
     for i in range(80):
         num_categories = len(coco_gt_dict['categories'])
+        need_new_cat = True
         for j in range(num_categories):
             if i+1 == coco_gt_dict['categories'][j]['id']:
-                continue
+                need_new_cat = False
+                break
 
+        if need_new_cat:
+            print("Missed a category. Appending")
             coco_gt_dict['categories'].append({"supercategory": "object",
                                                "name": str(i+1),
                                                "id": i+1})
-            break
 
 
+    # print('length of gt images', len(coco_gt_dict['images']))
+    # print('length of gt categories', len(coco_gt_dict['categories']))
+    # print('length of gt annotations', len(coco_gt_dict['annotations']))
+
+    # #################TEMP CODE####################
+    # import json
+    # print('saving det file')
+    # with open('/home/davidhall/Desktop/temp_mAP_stuff/homemade_detfile.json', 'w') as f:
+    #     json.dump(coco_det_list, f)
+    # print('saving gt file')
+    # with open('/home/davidhall/Desktop/temp_mAP_stuff/homemade_gtfile.json', 'w') as f:
+    #     json.dump(coco_gt_dict, f)
 
     # Finish creating the coco ground truth object
     coco_gt.dataset = coco_gt_dict
@@ -137,6 +151,8 @@ def coco_mAP(param_sequence, use_heatmap=True):
     # Note that I assume the idx for max_dets=100 is 2
     # Note that I assume the idx for area_rng='all' is 0
     precisions = coco_eval.eval['precision'][:, :, :, 0, 2]
+
+    coco_eval.summarize()
 
 
     # Check that there are precisions here, if not return zero

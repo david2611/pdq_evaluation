@@ -4,6 +4,7 @@ import json
 import time
 from itertools import islice
 import sys
+# TODO update to be less of a hack
 # Temp way to get access to COCO code for now
 sys.path.append('/home/davidhall/Documents/postdoc_2018-2020/projects/rvc_new_metrics_sandbox/sandbox/'
            'evaluator_tools/metric_downloaded_code/cocoapi/PythonAPI/')
@@ -185,6 +186,9 @@ class GTLoader:
             else:
                 # load the annotations available for the given image
                 # filter out any annotations which do not have segmentations
+                for annotation in coco_annotations[img_id]:
+                    if "segmentation" not in annotation.keys():
+                        print("SKIPPED A GT OBJECT!")
                 img_annotations = [
                     annotation
                     for annotation in coco_annotations[img_id]
@@ -194,15 +198,63 @@ class GTLoader:
                 seg_masks = [self.coco_obj.annToMask(annotation) for annotation in img_annotations]
                 # extract the class ids for each annotation (note that we subtract 1 so that class ids start at 0)
                 class_ids = [annotation['category_id'] for annotation in img_annotations]
+                bboxes = []
+                ignores = [annotation['ignore'] if 'ignore' in annotation.keys() else False for annotation in img_annotations ]
+                iscrowds = [annotation['iscrowd'] for annotation in img_annotations]
+                areas = [annotation['area'] for annotation in img_annotations]
+                for annotation in img_annotations:
+                    box = annotation['bbox']
+                    box[2] += box[0]
+                    box[3] += box[1]
+                    bboxes.append(box)
                 # generate ground truth instances from the COCO annotation information
                 # NOTE this will skip any annotation which has a bad segmentation mask (all zeros)
                 yield [
                     GroundTruthInstance(
                         segmentation_mask=seg_masks[ann_idx],
                         true_class_label=ann_idx_map[class_ids[ann_idx]],
+                        coco_bounding_box=bboxes[ann_idx],
+                        coco_ignore=ignores[ann_idx],
+                        coco_iscrowd=iscrowds[ann_idx],
+                        coco_area=areas[ann_idx]
                         )
                     for ann_idx in range(len(img_annotations)) if np.amax(seg_masks[ann_idx] > 0)
                 ]
+
+
+def convert_coco_det_to_rvc_det(det_filename, gt_filename, save_filename):
+    coco_obj = COCO(gt_filename)
+
+    with open(det_filename, 'r') as fp:
+        det_coco_dicts = json.load(fp)
+
+    gt_img_ids = sorted(coco_obj.imgs.keys())
+    det_img_ids = np.array([det_dict['image_id'] for det_dict in det_coco_dicts])
+    rvc1_dets = []
+    class_list = [coco_obj.cats[class_id]['name'] for class_id in sorted(coco_obj.cats.keys())]
+    ann_idx_map = {
+        cat_id: idx
+        for idx, cat_id in enumerate(sorted(coco_obj.cats.keys()))
+    }
+    empty_covars = [[[0, 0], [0, 0]], [[0, 0], [0, 0]]]
+    # Go through all images in coco gt and make det inputs for them
+    for img_idx, img_id in enumerate(gt_img_ids):
+        img_coco_dets = [det_coco_dicts[idx] for idx in np.argwhere(det_img_ids == img_id).flatten()]
+        img_rvc1_dets = []
+        for det_idx, det in enumerate(img_coco_dets):
+            # TODO Note currently assumes the detection has a bbox entry
+            box = det['bbox']
+            box[2] += box[0]
+            box[3] += box[1]
+            label_probs = np.ones(len(class_list)) * ((1 - det['score'])/(len(class_list)-1))
+            label_probs[ann_idx_map[det['category_id']]] = det['score']
+            det_dict = {'bbox': box, 'covars': empty_covars, "label_probs": list(label_probs.astype(float))}
+            img_rvc1_dets.append(det_dict)
+
+        rvc1_dets.append(img_rvc1_dets)
+    save_dict = {'classes': class_list, "detections": rvc1_dets}
+    with open(save_filename, 'w') as f:
+        json.dump(save_dict, f)
 
 
 def are_classes_same(class_1, class_2):

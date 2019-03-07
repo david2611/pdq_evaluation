@@ -136,6 +136,7 @@ class ImageGTLoader:
                         yield data_holders.GroundTruthInstance(
                             true_class_label=class_id,
                             segmentation_mask=(self._masks == mask_id),
-                            bounding_box=[int(v) for v in detection_data.get('bounding_box', [])],
+                            # TODO CHECK THIS DOESN'T BREAK THINGS
+                            coco_bounding_box=[int(v) for v in detection_data.get('bounding_box', [])],
                             num_pixels=int(detection_data.get('num_pixels', -1))
                         )

@@ -77,6 +77,7 @@ class PDQ(object):
         :return: The average PDQ across all images as a float.
         """
         self.reset()
+
         pool = Pool(processes=6)
 
         num_imgs = len(pdq_param_lists)
@@ -348,7 +349,7 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
     if len(gt_instances) == 0 or len(det_instances) == 0:
         if len(det_instances) > 0:
             img_det_evals = [{"det_id": idx, "gt_id": None, "ignore": False, "matched": False,
-                              "pPDQ": 0.0, "spatial": 0.0, "label": 0.0}
+                              "pPDQ": 0.0, "spatial": 0.0, "label": 0.0, "correct_class": None}
                              for idx in range(len(det_instances))]
 
         # Filter out GT instances which are to be ignored because they are too small
@@ -356,7 +357,7 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
         if len(gt_instances) > 0:
             for gt_idx, gt_instance in enumerate(gt_instances):
                 gt_eval_dict = {"det_id": None, "gt_id": gt_idx, "ignore": False, "matched": False,
-                                "pPDQ": 0.0, "spatial": 0.0, "label": 0.0}
+                                "pPDQ": 0.0, "spatial": 0.0, "label": 0.0, "correct_class": gt_instance.class_label}
                 if _is_gt_included(gt_instance, filter_gt):
                     FN += 1
                 else:
@@ -389,9 +390,12 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
         det_eval_dict = {"det_id": int(col_id), "gt_id": int(row_id), "matched": True, "ignore": False,
                          "pPDQ": float(overall_quality_table[row_id, col_id]),
                          "spatial": float(spatial_quality_table[row_id, col_id]),
-                         "label": float(label_quality_table[row_id, col_id])}
+                         "label": float(label_quality_table[row_id, col_id]),
+                         "correct_class": None}
         gt_eval_dict = det_eval_dict.copy()
         if overall_quality_table[row_id, col_id] > 0:
+            det_eval_dict["correct_class"] = gt_instances[row_id].class_label
+            gt_eval_dict["correct_class"] = gt_instances[row_id].class_label
             if row_id < len(gt_instances) and _is_gt_included(gt_instances[row_id], filter_gt):
                 true_positives += 1
             else:
@@ -403,13 +407,13 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
             img_gt_evals.append(gt_eval_dict)
         else:
             if row_id < len(gt_instances):
+                gt_eval_dict["correct_class"] = gt_instances[row_id].class_label
                 gt_eval_dict["det_id"] = None
                 gt_eval_dict["matched"] = False
                 if _is_gt_included(gt_instances[row_id], filter_gt):
                     false_negatives += 1
                 else:
                     gt_eval_dict["ignore"] = True
-
                 img_gt_evals.append(gt_eval_dict)
 
             if col_id < len(det_instances):
