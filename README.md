@@ -58,4 +58,5 @@ convert_coco.py
  
  `python visualise_pdq_analysis.py --data_type <test_type> --ground_truth <gt_location> --gt_img_folder <gt_imgs_location> --det_json <det_json_file> --det_analysis <det_analysis_file> --gt_analysis <gt_analysis_file> --save_folder <save_folder_location> --set_cov <cov> --img_type <ext> --full_info (opt)` 
  Recommend running with full_info flag on.
+ 
  TODO add description ... too sick ... read code for parameter meanings if you need it that badly.
