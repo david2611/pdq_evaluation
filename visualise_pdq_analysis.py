@@ -17,17 +17,17 @@ from data_holders import PBoxDetInst
 from tqdm import tqdm
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--ground_truth', help='file or folder location where ground-truth is kept')
 parser.add_argument('--data_type', help='type of data being evaluated')
+parser.add_argument('--ground_truth', help='file or folder location where ground-truth is kept')
 parser.add_argument('--gt_img_folder', help='folder with all gt images in order of gt_instances')
 parser.add_argument('--det_json', help='filename for detection file to be matched with the ground-truth')
 parser.add_argument('--det_analysis', help='filename for json containing detection-wise analysis information')
 parser.add_argument('--gt_analysis', help='filename for json containing ground-truth-wise analysis information')
-parser.add_argument('--img_type', help='type of image in gt_img_folder (png or jpg)')
 parser.add_argument('--save_folder', help='location where all analysis images will be stored')
+parser.add_argument('--set_cov', type=float, help='set covariance for all det corners')
+parser.add_argument('--img_type', help='type of image in gt_img_folder (png or jpg)')
 parser.add_argument('--full_info', action='store_true', help='flag for stating if all pPDQ information should be'
                                                              'displayed as part of the figure.')
-parser.add_argument('--set_cov', type=float, help='set covariance for all gt corners')
 args = parser.parse_args()
 
 if not os.path.isdir(args.save_folder):
