@@ -19,6 +19,8 @@ class PDQ(object):
         self._tot_overall_quality = 0.0
         self._tot_spatial_quality = 0.0
         self._tot_label_quality = 0.0
+        self._tot_fg_quality = 0.0
+        self._tot_bg_quality = 0.0
         self._tot_TP = 0
         self._tot_FP = 0
         self._tot_FN = 0
@@ -37,6 +39,8 @@ class PDQ(object):
         self._tot_overall_quality += results['overall']
         self._tot_spatial_quality += results['spatial']
         self._tot_label_quality += results['label']
+        self._tot_fg_quality += results['fg']
+        self._tot_bg_quality += results['bg']
         self._tot_TP += results['TP']
         self._tot_FP += results['FP']
         self._tot_FN += results['FN']
@@ -57,6 +61,8 @@ class PDQ(object):
         self._tot_overall_quality = 0.0
         self._tot_spatial_quality = 0.0
         self._tot_label_quality = 0.0
+        self._tot_fg_quality = 0.0
+        self._tot_bg_quality = 0.0
         self._tot_TP = 0
         self._tot_FP = 0
         self._tot_FN = 0
@@ -86,6 +92,8 @@ class PDQ(object):
             self._tot_overall_quality += img_results['overall']
             self._tot_spatial_quality += img_results['spatial']
             self._tot_label_quality += img_results['label']
+            self._tot_fg_quality += img_results['fg']
+            self._tot_bg_quality += img_results['bg']
             self._tot_TP += img_results['TP']
             self._tot_FP += img_results['FP']
             self._tot_FN += img_results['FN']
@@ -129,6 +137,16 @@ class PDQ(object):
         """
         if self._tot_TP > 0.0:
             return self._tot_overall_quality / float(self._tot_TP)
+        return 0.0
+
+    def get_avg_fg_quality_score(self):
+        if self._tot_TP > 0.0:
+            return self._tot_fg_quality / float(self._tot_TP)
+        return 0.0
+
+    def get_avg_bg_quality_score(self):
+        if self._tot_TP > 0.0:
+            return self._tot_bg_quality / float(self._tot_TP)
         return 0.0
 
     def get_assignment_counts(self):
@@ -296,6 +314,8 @@ def _gen_cost_tables(gt_instances, det_instances):
     overall_cost_table = np.ones((n_pairs, n_pairs), dtype=np.float32)
     spatial_cost_table = np.ones((n_pairs, n_pairs), dtype=np.float32)
     label_cost_table = np.ones((n_pairs, n_pairs), dtype=np.float32)
+    bg_cost_table = np.ones((n_pairs, n_pairs), dtype=np.float32)
+    fg_cost_table = np.ones((n_pairs, n_pairs), dtype=np.float32)
     img_shape = gt_instances[0].segmentation_mask.shape
 
     # Generate all the matrices needed
@@ -309,6 +329,14 @@ def _gen_cost_tables(gt_instances, det_instances):
     bg_loss = _calc_bg_loss(bg_seg_mat, det_seg_heatmap_mat)
     spatial_qual = _calc_spatial_qual(fg_loss, bg_loss, num_fg_pixels_vec)
 
+    fg_qual = np.exp(fg_loss)
+    fg_qual[np.isclose(fg_qual, 0)] = 0
+    fg_qual[np.isclose(fg_qual, 1)] = 1
+
+    bg_qual = np.exp(bg_loss)
+    bg_qual[np.isclose(bg_qual, 0)] = 0
+    bg_qual[np.isclose(bg_qual, 1)] = 1
+
     # Generate the overall cost table (1 - overall quality)
     overall_cost_table[:len(gt_instances), :len(det_instances)] -= _calc_overall_qual(label_qual_mat,
                                                                                       spatial_qual)
@@ -317,7 +345,12 @@ def _gen_cost_tables(gt_instances, det_instances):
     spatial_cost_table[:len(gt_instances), :len(det_instances)] -= spatial_qual
     label_cost_table[:len(gt_instances), :len(det_instances)] -= label_qual_mat
 
-    return {'overall': overall_cost_table, 'spatial': spatial_cost_table, 'label': label_cost_table}
+    # Generate FG and BG cost tables
+    fg_cost_table[:len(gt_instances), :len(det_instances)] -= fg_qual
+    bg_cost_table[:len(gt_instances), :len(det_instances)] -= bg_qual
+
+    return {'overall': overall_cost_table, 'spatial': spatial_cost_table, 'label': label_cost_table,
+            'fg': fg_cost_table, 'bg': bg_cost_table}
 
 
 def _calc_qual_img(gt_instances, det_instances, filter_gt):
@@ -349,7 +382,8 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
     if len(gt_instances) == 0 or len(det_instances) == 0:
         if len(det_instances) > 0:
             img_det_evals = [{"det_id": idx, "gt_id": None, "ignore": False, "matched": False,
-                              "pPDQ": 0.0, "spatial": 0.0, "label": 0.0, "correct_class": None}
+                              "pPDQ": 0.0, "spatial": 0.0, "label": 0.0, "correct_class": None,
+                              'bg': 0.0, 'fg': 0.0}
                              for idx in range(len(det_instances))]
 
         # Filter out GT instances which are to be ignored because they are too small
@@ -357,14 +391,15 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
         if len(gt_instances) > 0:
             for gt_idx, gt_instance in enumerate(gt_instances):
                 gt_eval_dict = {"det_id": None, "gt_id": gt_idx, "ignore": False, "matched": False,
-                                "pPDQ": 0.0, "spatial": 0.0, "label": 0.0, "correct_class": gt_instance.class_label}
+                                "pPDQ": 0.0, "spatial": 0.0, "label": 0.0, "correct_class": gt_instance.class_label,
+                                'fg': 0.0, 'bg': 0.0}
                 if _is_gt_included(gt_instance, filter_gt):
                     FN += 1
                 else:
                     gt_eval_dict["ignore"] = True
                 img_gt_evals.append(gt_eval_dict)
 
-        return {'overall': 0.0, 'spatial': 0.0, 'label': 0.0, 'TP': 0, 'FP': len(det_instances),
+        return {'overall': 0.0, 'spatial': 0.0, 'label': 0.0, 'fg': 0.0, 'bg': 0.0, 'TP': 0, 'FP': len(det_instances),
                 'FN': FN, "img_det_evals": img_det_evals, "img_gt_evals": img_gt_evals}
 
     # For each possible pairing, calculate the quality of that pairing and convert it to a cost
@@ -380,6 +415,9 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
     spatial_quality_table = 1 - cost_tables['spatial']
     label_quality_table = 1 - cost_tables['label']
 
+    fg_quality_table = 1 - cost_tables['fg']
+    bg_quality_table = 1 - cost_tables['bg']
+
     # Calculate the number of TPs, FPs, and FNs for the image.
     true_positives = 0
     false_positives = 0
@@ -391,6 +429,8 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
                          "pPDQ": float(overall_quality_table[row_id, col_id]),
                          "spatial": float(spatial_quality_table[row_id, col_id]),
                          "label": float(label_quality_table[row_id, col_id]),
+                         'fg': float(fg_quality_table[row_id, col_id]),
+                         'bg': float(bg_quality_table[row_id, col_id]),
                          "correct_class": None}
         gt_eval_dict = det_eval_dict.copy()
         if overall_quality_table[row_id, col_id] > 0:
@@ -430,6 +470,8 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
     label_quality_table[overall_quality_table == 0] = 0.0
     tot_tp_spatial_quality = np.sum(spatial_quality_table[row_idxs, col_idxs])
     tot_tp_label_quality = np.sum(label_quality_table[row_idxs, col_idxs])
+    tot_tp_fg_quality = np.sum(fg_quality_table[row_idxs, col_idxs])
+    tot_tp_bg_quality = np.sum(bg_quality_table[row_idxs, col_idxs])
 
     # Sort the evaluation details to match the order of the detections and ground truths
     img_det_eval_idxs = [det_eval_dict["det_id"] for det_eval_dict in img_det_evals]
@@ -438,6 +480,7 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
     img_gt_evals = [img_gt_evals[idx] for idx in np.argsort(img_gt_eval_idxs)]
 
     return {'overall': tot_overall_img_quality, 'spatial': tot_tp_spatial_quality, 'label': tot_tp_label_quality,
+            'fg': tot_tp_fg_quality, 'bg': tot_tp_bg_quality,
             'TP': true_positives, 'FP': false_positives, 'FN': false_negatives,
             'img_gt_evals': img_gt_evals, 'img_det_evals': img_det_evals}
 

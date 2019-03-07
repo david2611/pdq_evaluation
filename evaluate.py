@@ -111,6 +111,8 @@ def main():
     avg_spatial_quality = evaluator.get_avg_spatial_score()
     avg_label_quality = evaluator.get_avg_label_score()
     avg_overall_quality = evaluator.get_avg_overall_quality_score()
+    avg_fg_quality = evaluator.get_avg_fg_quality_score()
+    avg_bg_quality = evaluator.get_avg_fg_quality_score()
 
     print("Calculating mAP")
     print("Extracting GT and Detections")
@@ -123,17 +125,22 @@ def main():
         print('mAP: {0}'.format(mAP))
 
     result = {"score": score*100, "avg_pPDQ": avg_overall_quality, "avg_spatial": avg_spatial_quality,
+              'avg_fg': avg_fg_quality, 'avg_bg': avg_bg_quality,
               "avg_label": avg_label_quality, "TP": TP, "FP": FP, "FN": FN, 'mAP': mAP}
     print("PDQ: {0:4f}\n"
           "mAP: {1:4f}\n"
           "avg_pPDQ:{2:4f}\n"
           "avg_spatial:{3:4f}\n"
           "avg_label:{4:4f}\n"
-          "TP:{5}\nFP:{6}\nFN:{7}".format(score*100, mAP, avg_overall_quality, avg_spatial_quality,
-                                          avg_label_quality, TP, FP, FN))
+          "avg_foreground:{5:4f}\n"
+          "avg_background:{6:4f}\n"
+          "TP:{7}\nFP:{8}\nFN:{9}".format(score*100, mAP, avg_overall_quality, avg_spatial_quality,
+                                          avg_label_quality,
+                                          avg_fg_quality, avg_bg_quality,
+                                          TP, FP, FN))
 
     with open(os.path.join(args.save_folder, 'scores.txt'), 'w') as output_file:
-        output_file.write("\n".join("{0}:{1}".format(k, v) for k, v in result.items()))
+        output_file.write("\n".join("{0}:{1}".format(k, v) for k, v in sorted(result.items())))
 
     # Get the detection-wise and ground-truth-wise qualities and matches for PDQ and save them to file
     all_gt_eval_dicts = evaluator._gt_evals
