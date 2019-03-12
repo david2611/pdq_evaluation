@@ -9,6 +9,7 @@ import json
 import numpy as np
 import rvc1_gt_loader
 import rvc1_submission_loader
+from coco_LRP import coco_LRP
 
 _NUM_VALID = 4
 
@@ -112,7 +113,11 @@ def main():
     avg_label_quality = evaluator.get_avg_label_score()
     avg_overall_quality = evaluator.get_avg_overall_quality_score()
     avg_fg_quality = evaluator.get_avg_fg_quality_score()
-    avg_bg_quality = evaluator.get_avg_fg_quality_score()
+    avg_bg_quality = evaluator.get_avg_bg_quality_score()
+
+    # Get the detection-wise and ground-truth-wise qualities and matches for PDQ and save them to file
+    all_gt_eval_dicts = evaluator._gt_evals
+    all_det_eval_dicts = evaluator._det_evals
 
     print("Calculating mAP")
     print("Extracting GT and Detections")
@@ -124,9 +129,19 @@ def main():
         mAP = coco_mAP(param_sequence, use_heatmap=False)
         print('mAP: {0}'.format(mAP))
 
+    print("Calculating LRP")
+    print("Extracting GT and Detections")
+    param_sequence, len_sequences = gen_param_sequence()
+    if args.mAP_heatmap:
+        LRP_dict = coco_LRP(param_sequence, use_heatmap=True, full=True)
+    else:
+        LRP_dict = coco_LRP(param_sequence, use_heatmap=False, full=True)
+
     result = {"score": score*100, "avg_pPDQ": avg_overall_quality, "avg_spatial": avg_spatial_quality,
               'avg_fg': avg_fg_quality, 'avg_bg': avg_bg_quality,
-              "avg_label": avg_label_quality, "TP": TP, "FP": FP, "FN": FN, 'mAP': mAP}
+              "avg_label": avg_label_quality, "TP": TP, "FP": FP, "FN": FN, 'mAP': mAP,
+              'moLRP': LRP_dict['moLRP'], 'moLRPLoc': LRP_dict['moLRPLoc'], 'moLRPFP': LRP_dict['moLRPFP'],
+              'moLRPFN': LRP_dict['moLRPFN']}
     print("PDQ: {0:4f}\n"
           "mAP: {1:4f}\n"
           "avg_pPDQ:{2:4f}\n"
@@ -134,17 +149,17 @@ def main():
           "avg_label:{4:4f}\n"
           "avg_foreground:{5:4f}\n"
           "avg_background:{6:4f}\n"
-          "TP:{7}\nFP:{8}\nFN:{9}".format(score*100, mAP, avg_overall_quality, avg_spatial_quality,
-                                          avg_label_quality,
-                                          avg_fg_quality, avg_bg_quality,
-                                          TP, FP, FN))
+          "TP:{7}\nFP:{8}\nFN:{9}\n"
+          "moLRP:{10:4f}\n"
+          "moLRPLoc:{11:4f}\n"
+          "moLRPFP:{12:4f}\n"
+          "moLRPFN:{13:4f}\n".format(score*100, mAP, avg_overall_quality, avg_spatial_quality,
+                                    avg_label_quality, avg_fg_quality, avg_bg_quality, TP, FP, FN,
+                                    LRP_dict['moLRP'], LRP_dict['moLRPLoc'], LRP_dict['moLRPFP'], LRP_dict['moLRPFN']))
 
     with open(os.path.join(args.save_folder, 'scores.txt'), 'w') as output_file:
         output_file.write("\n".join("{0}:{1}".format(k, v) for k, v in sorted(result.items())))
 
-    # Get the detection-wise and ground-truth-wise qualities and matches for PDQ and save them to file
-    all_gt_eval_dicts = evaluator._gt_evals
-    all_det_eval_dicts = evaluator._det_evals
     prev_idx = 0
     for idx, len_sequence in enumerate(len_sequences):
         seq_gt_eval_dicts = all_gt_eval_dicts[prev_idx:prev_idx+len_sequence]

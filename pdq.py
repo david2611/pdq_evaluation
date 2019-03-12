@@ -329,11 +329,13 @@ def _gen_cost_tables(gt_instances, det_instances):
     bg_loss = _calc_bg_loss(bg_seg_mat, det_seg_heatmap_mat)
     spatial_qual = _calc_spatial_qual(fg_loss, bg_loss, num_fg_pixels_vec)
 
-    fg_qual = np.exp(fg_loss)
+    fg_loss_per_gt_pixel = fg_loss/num_fg_pixels_vec
+    fg_qual = np.exp(fg_loss_per_gt_pixel)
     fg_qual[np.isclose(fg_qual, 0)] = 0
     fg_qual[np.isclose(fg_qual, 1)] = 1
 
-    bg_qual = np.exp(bg_loss)
+    bg_loss_per_gt_pixel = bg_loss/num_fg_pixels_vec
+    bg_qual = np.exp(bg_loss_per_gt_pixel)
     bg_qual[np.isclose(bg_qual, 0)] = 0
     bg_qual[np.isclose(bg_qual, 1)] = 1
 
@@ -470,6 +472,8 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
     label_quality_table[overall_quality_table == 0] = 0.0
     tot_tp_spatial_quality = np.sum(spatial_quality_table[row_idxs, col_idxs])
     tot_tp_label_quality = np.sum(label_quality_table[row_idxs, col_idxs])
+    fg_quality_table[overall_quality_table == 0] = 0.0
+    bg_quality_table[overall_quality_table == 0] = 0.0
     tot_tp_fg_quality = np.sum(fg_quality_table[row_idxs, col_idxs])
     tot_tp_bg_quality = np.sum(bg_quality_table[row_idxs, col_idxs])
 
