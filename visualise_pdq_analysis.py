@@ -28,18 +28,26 @@ parser.add_argument('--set_cov', type=float, help='set covariance for all det co
 parser.add_argument('--img_type', help='type of image in gt_img_folder (png or jpg)')
 parser.add_argument('--full_info', action='store_true', help='flag for stating if all pPDQ information should be'
                                                              'displayed as part of the figure.')
+parser.add_argument('--colour_blind', '-cb', action='store_true', help='flag for using colour blind mode (orange and blue)')
 args = parser.parse_args()
 
 if not os.path.isdir(args.save_folder):
     os.makedirs(args.save_folder)
+
+if args.colour_blind:
+    correct_colour = 'blue'
+    incorrect_colour = 'C1'
+else:
+    correct_colour = 'green'
+    incorrect_colour = 'red'
 
 # Define palette for gt mask images
 # red for false negatives (above 1.0)
 # green for true positives (below 1.0)
 # transparent for normal pixels
 palette = copy(plt.cm.gray)
-palette.set_over('r', 1.0)
-palette.set_under('g', 1.0)
+palette.set_over(incorrect_colour, 1.0)
+palette.set_under(correct_colour, 1.0)
 palette.set_bad(alpha=0.0)
 
 
@@ -93,6 +101,8 @@ def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_anal
     ax.set_axis_off()
     ax.imshow(img)
 
+
+
     # Add gt segmentation masks blended onto the image
     for gt_idx, (gt_inst, gt_analysis) in enumerate(zip(img_gts, img_gt_analysis)):
         # skip if gt was ignored at analysis time
@@ -102,10 +112,10 @@ def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_anal
         mask = gt_inst.segmentation_mask.astype(int)
         # set mask to correct value for TP or FN
         if gt_analysis['matched']:
-            text_box_colour = 'green'
+            text_box_colour = correct_colour
             mask[mask > 0] = -1
         else:
-            text_box_colour = 'red'
+            text_box_colour = incorrect_colour
             mask[mask > 0] = 2
 
         # Draw mask image
@@ -131,12 +141,12 @@ def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_anal
         det_box = det_inst.box
 
         if det_analysis['matched']:
-            colour = 'green'
+            colour = correct_colour
         else:
-            colour = 'red'
+            colour = incorrect_colour
         ax.add_patch(
             patches.Rectangle((det_box[0], det_box[1]), (det_box[2] - det_box[0]) + 1, (det_box[3] - det_box[1]) + 1,
-                              edgecolor=colour, facecolor='none', linewidth=1))
+                              edgecolor=colour, facecolor='none', linewidth=3))
         # draw covariances
         if isinstance(det_inst, PBoxDetInst):
             det_covs = det_inst.covs
