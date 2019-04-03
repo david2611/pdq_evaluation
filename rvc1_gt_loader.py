@@ -1,12 +1,22 @@
+"""
+This code is all adapted from the original ACRV Robotic Vision Challenge code.
+Adaptations have been made to enable some of the extra functionality needed in this repository.
+Link to original code: https://github.com/jskinn/rvchallenge-evaluation/blob/master/gt_loader.py
+Link to challenge websites:
+    - CVPR 2019: https://competitions.codalab.org/competitions/20940
+    - Continuous: https://competitions.codalab.org/competitions/21727
+"""
+
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
 import os.path
-import warnings
 import json
 import cv2
 import data_holders
 import rvc1_class_list
+
+
 
 
 def read_ground_truth(directory, one_sequence=False):
@@ -28,10 +38,13 @@ def read_ground_truth(directory, one_sequence=False):
     ...
 
     :param directory: location of root directory where folders containing sequence's gt data are located
+    :param one_sequence: parameter for defining if only a single sequence is being examined and therefore directory
+    actually contains all sequence data without subfolders.
     :return: sequences: dictionary of sequence gt generators
     """
     if one_sequence:
         sequences = [SequenceGTLoader(directory)]
+        return sequences
     sequences = []
     for sequence_dir in sorted(os.listdir(directory)):
         sequence_path = os.path.join(directory, sequence_dir)
@@ -42,7 +55,7 @@ def read_ground_truth(directory, one_sequence=False):
 
 class SequenceGTLoader:
     """
-    Create a generator to read all the ground truth information for a particular sequence.
+    Object for creating a generator to read all the ground truth information for a particular sequence.
     Each iteration of the generator returns another generator over the ground truth instances
     for that image.
     Given that the image ids are integers, it is guaranteed to return the ground truth in

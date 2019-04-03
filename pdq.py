@@ -1,3 +1,12 @@
+"""
+This code is all adapted from the original ACRV Robotic Vision Challenge code.
+Adaptations have been made to enable some of the extra functionality needed in this repository.
+Link to original code: https://github.com/jskinn/rvchallenge-evaluation/blob/master/pdq.py
+Link to challenge websites:
+    - CVPR 2019: https://competitions.codalab.org/competitions/20940
+    - Continuous: https://competitions.codalab.org/competitions/21727
+"""
+
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import numpy as np
@@ -13,8 +22,14 @@ _SMALL_VAL = 1e-14
 class PDQ(object):
     """
     Class for calculating PDQ for a set of images.
+    Extension of the code used in the 1st robotic vision challenge (RVC1) code.
+    Link to RVC1 PDQ code: https://github.com/jskinn/rvchallenge-evaluation/blob/master/pdq.py
     """
     def __init__(self, filter_small=False):
+        """
+        Initialisation function for PDQ evaluator.
+        :param filter_small: Flag defining if small objects should be ignored (as done in RVC1)
+        """
         super(PDQ, self).__init__()
         self._tot_overall_quality = 0.0
         self._tot_spatial_quality = 0.0
@@ -44,6 +59,8 @@ class PDQ(object):
         self._tot_TP += results['TP']
         self._tot_FP += results['FP']
         self._tot_FN += results['FN']
+        self._det_evals.append(results['img_det_evals'])
+        self._gt_evals.append(results['img_gt_evals'])
 
     def get_pdq_score(self):
         """
@@ -110,7 +127,7 @@ class PDQ(object):
         Get the average spatial quality score for all assigned detections in all frames analysed at the current time.
         Note that this is averaged over the number of assigned detections (TPs) and not the full set of TPs, FPs,
         and FNs like the final PDQ score.
-        :return: average spatial quality of every detection
+        :return: average spatial quality of every assigned detection
         """
         if self._tot_TP > 0.0:
             return self._tot_spatial_quality / float(self._tot_TP)
@@ -121,7 +138,7 @@ class PDQ(object):
         Get the average label quality score for all assigned detections in all frames analysed at the current time.
         Note that this is averaged over the number of assigned detections (TPs) and not the full set of TPs, FPs,
         and FNs like the final PDQ score.
-        :return: average label quality of every detection
+        :return: average label quality of every assigned detection
         """
         if self._tot_TP > 0.0:
             return self._tot_label_quality / float(self._tot_TP)
@@ -133,25 +150,39 @@ class PDQ(object):
         in all frames analysed at the current time.
         Note that this is averaged over the number of assigned detections (TPs) and not the full set of TPs, FPs,
         and FNs like the final PDQ score.
-        :return: average overall pairwise quality of every  detection
+        :return: average overall pairwise quality of every assigned detection
         """
         if self._tot_TP > 0.0:
             return self._tot_overall_quality / float(self._tot_TP)
         return 0.0
 
     def get_avg_fg_quality_score(self):
+        """
+        Get the average foreground spatial quality score for all assigned detections
+        in all frames analysed at the current time.
+        Note that this is averaged over the number of assigned detections (TPs) and not the full set of TPs, FPs,
+        and FNs like the final PDQ score.
+        :return: average overall pairwise foreground spatial quality of every assigned detection
+        """
         if self._tot_TP > 0.0:
             return self._tot_fg_quality / float(self._tot_TP)
         return 0.0
 
     def get_avg_bg_quality_score(self):
+        """
+        Get the average background spatial quality score for all assigned detections
+        in all frames analysed at the current time.
+        Note that this is averaged over the number of assigned detections (TPs) and not the full set of TPs, FPs,
+        and FNs like the final PDQ score.
+        :return: average overall pairwise background spatial quality of every assigned detection
+        """
         if self._tot_TP > 0.0:
             return self._tot_bg_quality / float(self._tot_TP)
         return 0.0
 
     def get_assignment_counts(self):
         """
-        Get the total number of TP, FP, and FN detections across all frames analysed at the current time.
+        Get the total number of TPs, FPs, and FNs across all frames analysed at the current time.
         :return: tuple containing (TP, FP, FN)
         """
         return self._tot_TP, self._tot_FP, self._tot_FN
@@ -162,10 +193,14 @@ def _get_image_evals(pair):
     Evaluate the results for a given image
     :param pair: tuple containing list of GroundTruthInstances and DetectionInstances for the given image respectively
     :return: results dictionary containing total overall spatial quality, total spatial quality on positively assigned
-    detections, total label quality on positively assigned detections, number of true positives,
-    number of false positives, and number false negatives for the given image.
+    detections, total label quality on positively assigned detections, total foreground spatial quality on positively
+    assigned detections, total background spatial quality on positively assigned detections, number of true positives,
+    number of false positives, number false negatives, detection evaluation summary, and ground-truth evaluation summary
+    for the given image.
     Format {'overall':<tot_overall_quality>, 'spatial': <tot_tp_spatial_quality>, 'label': <tot_tp_label_quality>,
-    'TP': <num_true_positives>, 'FP': <num_false_positives>, 'FN': <num_false_positives>}
+    'fg':<tot_tp_foreground_quality>, 'bg':<tot_tp_background_quality>, 'TP': <num_true_positives>,
+    'FP': <num_false_positives>, 'FN': <num_false_positives>, 'img_det_evals':<detection_evaluation_summary>,
+    'img_gt_evals':<ground-truth_evaluation_summary>}
     """
     gt_instances, det_instances, filter_gt = pair
     results = _calc_qual_img(gt_instances, det_instances, filter_gt)
@@ -244,6 +279,12 @@ def _calc_fg_loss(gt_seg_mat, det_seg_heatmap_mat):
 
 
 def _safe_log(mat):
+    """
+    Function for performing safe log (avoiding infinite loss) for all elements of a given matrix by adding _SMALL_VAL
+    to all elements.
+    :param mat: matrix of values
+    :return: safe log of matrix elements
+    """
     return np.log(mat + _SMALL_VAL)
 
 
@@ -308,8 +349,12 @@ def _gen_cost_tables(gt_instances, det_instances):
     detections within a given image.
     :param gt_instances: list of all GroundTruthInstances for a given image.
     :param det_instances: list of all DetectionInstances for a given image.
-    :return: g x d overall cost table for each combination of ground truth objects and detections
+    :return: dictionary of g x d cost tables for each combination of ground truth objects and detections.
+    Note that all costs are simply 1 - quality scores (required for Hungarian algorithm implementation)
+    Format: {'overall': overall pPDQ cost table, 'spatial': spatial quality cost table,
+    'label': label quality cost table, 'fg': foreground quality cost table, 'bg': background quality cost table}
     """
+    # Initialise cost tables
     n_pairs = max(len(gt_instances), len(det_instances))
     overall_cost_table = np.ones((n_pairs, n_pairs), dtype=np.float32)
     spatial_cost_table = np.ones((n_pairs, n_pairs), dtype=np.float32)
@@ -318,22 +363,24 @@ def _gen_cost_tables(gt_instances, det_instances):
     fg_cost_table = np.ones((n_pairs, n_pairs), dtype=np.float32)
     img_shape = gt_instances[0].segmentation_mask.shape
 
-    # Generate all the matrices needed
+    # Generate all the matrices needed for calculations
     gt_seg_mat, bg_seg_mat, num_fg_pixels_vec, gt_label_vec = _vectorize_img_gts(gt_instances, img_shape)
     img_shape = gt_instances[0].segmentation_mask.shape
     det_seg_heatmap_mat, det_label_prob_mat = _vectorize_img_dets(det_instances, img_shape)
 
-    # Calculate all qualities
+    # Calculate spatial and label qualities
     label_qual_mat = _calc_label_qual(gt_label_vec, det_label_prob_mat)
     fg_loss = _calc_fg_loss(gt_seg_mat, det_seg_heatmap_mat)
     bg_loss = _calc_bg_loss(bg_seg_mat, det_seg_heatmap_mat)
     spatial_qual = _calc_spatial_qual(fg_loss, bg_loss, num_fg_pixels_vec)
 
+    # Calculate foreground quality
     fg_loss_per_gt_pixel = fg_loss/num_fg_pixels_vec
     fg_qual = np.exp(fg_loss_per_gt_pixel)
     fg_qual[np.isclose(fg_qual, 0)] = 0
     fg_qual[np.isclose(fg_qual, 1)] = 1
 
+    # Calculate background quality
     bg_loss_per_gt_pixel = bg_loss/num_fg_pixels_vec
     bg_qual = np.exp(bg_loss_per_gt_pixel)
     bg_qual[np.isclose(bg_qual, 0)] = 0
@@ -347,7 +394,7 @@ def _gen_cost_tables(gt_instances, det_instances):
     spatial_cost_table[:len(gt_instances), :len(det_instances)] -= spatial_qual
     label_cost_table[:len(gt_instances), :len(det_instances)] -= label_qual_mat
 
-    # Generate FG and BG cost tables
+    # Generate foreground and background cost tables
     fg_cost_table[:len(gt_instances), :len(det_instances)] -= fg_qual
     bg_cost_table[:len(gt_instances), :len(det_instances)] -= bg_qual
 
@@ -371,10 +418,14 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
     :param det_instances: list of DetectionInstance objects describing the detections for the current image.
     :param filter_gt: boolean depicting if _is_gt_included should filter gt objects based on their size
     :return: results dictionary containing total overall spatial quality, total spatial quality on positively assigned
-    detections, total label quality on positively assigned detections, number of true positives,
-    number of false positives, and number false negatives for the given image.
+    detections, total label quality on positively assigned detections, total forerground quality on positively assigned
+    detections, total background quality on positively assigned detections, number of true positives,
+    number of false positives, number false negatives, detection evaluation summary,
+    and ground-truth evaluation summary for for the given image.
     Format {'overall':<tot_overall_quality>, 'spatial': <tot_tp_spatial_quality>, 'label': <tot_tp_label_quality>,
-    'TP': <num_true_positives>, 'FP': <num_false_positives>, 'FN': <num_false_positives>}
+    'fg':<tot_tp_foreground_quality>, 'bg':<tot_tp_background_quality>, 'TP': <num_true_positives>,
+    'FP': <num_false_positives>, 'FN': <num_false_positives>, 'img_det_evals':<detection_evaluation_summary>,
+    'img_gt_evals':<ground-truth_evaluation_summary>}
     """
     # Record the full evaluation details for every match
     img_det_evals = []
@@ -416,11 +467,11 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
     overall_quality_table = 1 - cost_tables['overall']
     spatial_quality_table = 1 - cost_tables['spatial']
     label_quality_table = 1 - cost_tables['label']
-
     fg_quality_table = 1 - cost_tables['fg']
     bg_quality_table = 1 - cost_tables['bg']
 
-    # Calculate the number of TPs, FPs, and FNs for the image.
+    # Go through all optimal assignments and summarize all pairwise statistics
+    # Calculate the number of TPs, FPs, and FNs for the image during the process
     true_positives = 0
     false_positives = 0
     false_negatives = 0
@@ -441,9 +492,10 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
             if row_id < len(gt_instances) and _is_gt_included(gt_instances[row_id], filter_gt):
                 true_positives += 1
             else:
+                # ignore detections on samples which are too small to be considered a valid object
                 det_eval_dict["ignore"] = True
                 gt_eval_dict["ignore"] = True
-                # ignore detections on samples which are too small to be considered a valid object
+                # Set the overall quality table value to zero so it does not get included in final total
                 overall_quality_table[row_id, col_id] = 0.0
             img_det_evals.append(det_eval_dict)
             img_gt_evals.append(gt_eval_dict)
@@ -467,13 +519,16 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
     # Calculate the sum of quality at the best matching pairs to calculate total qualities for the image
     tot_overall_img_quality = np.sum(overall_quality_table[row_idxs, col_idxs])
 
-    # Calculate the sum of spatial and label qualities only for TP samples
+    # Force spatial and label qualities to zero for total calculations as there is no actual association between
+    # detections and therefore no TP when this is the case.
     spatial_quality_table[overall_quality_table == 0] = 0.0
     label_quality_table[overall_quality_table == 0] = 0.0
-    tot_tp_spatial_quality = np.sum(spatial_quality_table[row_idxs, col_idxs])
-    tot_tp_label_quality = np.sum(label_quality_table[row_idxs, col_idxs])
     fg_quality_table[overall_quality_table == 0] = 0.0
     bg_quality_table[overall_quality_table == 0] = 0.0
+
+    # Calculate the sum of spatial and label qualities only for TP samples
+    tot_tp_spatial_quality = np.sum(spatial_quality_table[row_idxs, col_idxs])
+    tot_tp_label_quality = np.sum(label_quality_table[row_idxs, col_idxs])
     tot_tp_fg_quality = np.sum(fg_quality_table[row_idxs, col_idxs])
     tot_tp_bg_quality = np.sum(bg_quality_table[row_idxs, col_idxs])
 

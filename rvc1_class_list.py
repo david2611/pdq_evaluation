@@ -1,3 +1,11 @@
+"""
+This code is copied from the original ACRV Robotic Vision Challenge code.
+Link to original code: https://github.com/jskinn/rvchallenge-evaluation/blob/master/class_list.py
+Link to challenge websites:
+    - CVPR 2019: https://competitions.codalab.org/competitions/20940
+    - Continuous: https://competitions.codalab.org/competitions/21727
+"""
+
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 # This is the list of valid classes for this challenge, in order

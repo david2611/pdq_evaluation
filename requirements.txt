@@ -1,0 +1,6 @@
+pip==10.0.1
+matplotlib==3.0.2
+numpy==1.16.1
+opencv-python==4.0.0.21
+scipy==1.2.1
+tqdm==4.31.1

@@ -12,16 +12,35 @@ _SMALL_VAL = 1e-14
 class GroundTruthInstance(object):
     def __init__(self, segmentation_mask, true_class_label, coco_bounding_box=None, num_pixels=None,
                  coco_ignore=False, coco_iscrowd=False, coco_area=None):
+        """
+        GroundTruthInstance object initialisation function. GroundTruthInstance objects are designed to hold
+        data pertinent for a ground-truth object in the context of evaluation. Namely, the segmentation mask,
+        its class label, its bounding box and number of pixels. To ensure accurate conversion from our format
+        back to COCO format, we also store (where possible) the bounding box, area, and ignore and iscrowd flags
+        provided by COCO formatted ground-truths.
+        :param segmentation_mask: Boolean 2D array of pixels defining the pixels which make-up the ground-truth object
+        :param true_class_label: integer dictating the class label (value between 0 and 1 - <number_of_classes>)
+        :param coco_bounding_box: bounding box provided by COCO annotations (but converted to [x1, y1, x2, y2] format)
+        (default None)
+        :param num_pixels: number of pixels in detection, calculated from segmentation_mask if not provided (default None)
+        :param coco_ignore: Boolean defining if object is to be ignored under COCO annotation
+        :param coco_iscrowd: Boolean defining if object is labelled as crowd under COCO annotation
+        :param coco_area: Float defining area of ground-truth object as defined under COCO annotation
+        """
         self.segmentation_mask = segmentation_mask
         self.class_label = true_class_label
         self.coco_ignore = coco_ignore
         self.coco_iscrowd = coco_iscrowd
         self.coco_area = coco_area
         self.bounding_box = utils.generate_bounding_box_from_mask(segmentation_mask)
+
+        # If coco_bounding_box is not supplied, equate it to the provided bounding_box
         if coco_bounding_box is not None and len(coco_bounding_box) > 0:
             self.coco_bounding_box = coco_bounding_box
         else:
             self.coco_bounding_box = self.bounding_box.copy()
+
+        # Calculate the number of pixels based on segmentation mask if unprovided at initialisation
         if num_pixels is not None and num_pixels > 0:
             self.num_pixels = num_pixels
         else:
@@ -30,24 +49,46 @@ class GroundTruthInstance(object):
 
 class DetectionInstance(object):
     def __init__(self, class_list, heatmap=None):
+        """
+        DetectionInstance object class for when spatial probability heatmap is readily available and does not need to
+        be calculated.
+        :param class_list: list of label probabilities for each class, ordered to match the class labelling convention
+        of corresponding ground-truth data.
+        :param heatmap: 2D float image containing the spatial probability that each pixel is part of the
+        detected object.
+        """
         self._heatmap = heatmap
         self.class_list = class_list
 
     def calc_heatmap(self, img_size):
+        """
+        Function for returning the spatial probability heatmap image of the detection.
+        :param img_size: size of the image expected from the heatmap output.
+        :return: spatial probability heatmap of the size <img_size>
+        """
         return self._heatmap
 
     def get_max_class(self):
+        """
+        Function for returning the maximum class id of the detection (index of maximum score in class list)
+        :return: maximum class id of the detection.
+        """
         return np.argmax(self.class_list)
 
     def get_max_score(self):
+        """
+        Function for returning the maximum class score of the detection
+        :return: maximum class score of the detection
+        """
         return np.amax(self.class_list)
 
 
 class BBoxDetInst(DetectionInstance):
     def __init__(self, class_list, box, pos_prob=1.0):
         """
-        Initialisation function for a BBox detection instance
-        :param class_list: list of class probabilities for the detection
+        Initialisation function for a bounding box (BBox) detection instance
+        :param class_list: list of label probabilities for each class, ordered to match the class labelling convention
+        of corresponding ground-truth data.
         :param box: list of box corners that contain the object detected (inclusively).
         Formatted [x1, y1, x2, y2]
         :param pos_prob: float depicting the positional confidence
@@ -57,6 +98,12 @@ class BBoxDetInst(DetectionInstance):
         self.pos_prob = pos_prob
 
     def calc_heatmap(self, img_size):
+        """
+        Function for returning the spatial probability heatmap of the detection
+        :param img_size: size of the image expected from the heatmap output
+        :return: spatial probability heatmap of the size <img_size>
+        """
+
         heatmap = np.zeros(img_size, dtype=np.float32)
         x1, y1, x2, y2 = self.box
         x1_c, y1_c = np.ceil(self.box[0:2]).astype(np.int)
@@ -83,19 +130,23 @@ class BBoxDetInst(DetectionInstance):
 class PBoxDetInst(DetectionInstance):
     def __init__(self, class_list, box, covs):
         """
-        Initialisation function for a PBox detection instance
-        :param class_list: list of class probabilities for the detection
-        :param box: list of BBox corners, used to define the Gaussian corner mean locations for the box.
-        Formatted [x1, y1, x2, y2]
+        Initialisation function for a probabilistic bounding box (PBox) detection instance
+        :param class_list: list of label probabilities for each class, ordered to match the class labelling convention
+        of corresponding ground-truth data.
+        :param box: list of Gaussian corner mean locations, formatted [x1, y1, x2, y2].
         :param covs: list of two 2D covariance matrices used to define the covariances of the Gaussian corners.
-        Formatted [cov1, cov2] where cov1 and cov2 are formatted [[var_x, corr], [corr, var_y]]
+        Formatted [cov1, cov2] where cov1 and cov2 are formatted [[variance_x, corr], [corr, variance_y]]
         """
         super(PBoxDetInst, self).__init__(class_list)
         self.box = box
         self.covs = covs
 
     def calc_heatmap(self, img_size):
-
+        """
+        Function for returning the spatial probability heatmap of the detection
+        :param img_size: size of the image expected from the heatmap output
+        :return: spatial probability heatmap of the size <img_size>
+        """
         # get all covs in format (y,x) to match matrix ordering
         covs2 = [np.flipud(np.fliplr(cov)) for cov in self.covs]
 
@@ -122,7 +173,8 @@ def find_roi(img_size, mean, cov):
     This region of interest is the area with most change therein, with probabilities above 0.0027 and below 0.9973
     :param img_size: tuple: formatted (n_rows, n_cols) depicting the size of the image
     :param mean: list: formatted [mu_y, mu_x] describes the location of the mean of the Gaussian corner.
-    :param cov: 2D array: formatted [[var_y, corr], [corr, var_x]] describes the covariance of the Gaussian corner.
+    :param cov: 2D array: formatted [[variance_y, corr], [corr, variance_x]] describes the covariance of the
+    Gaussian corner.
     :return: roi_box formatted [x1, y1, x2, y2] depicting the corners of the region of interest (inclusive)
     """
 
@@ -168,26 +220,36 @@ def find_roi(img_size, mean, cov):
 def gen_single_heatmap(img_size, mean, cov):
     """
     Function for generating the heatmap for a given Gaussian corner.
+    Note that this is a fast approximation and not 100% accurate
     :param img_size: tuple: formatted (n_rows, n_cols) depicting the size of the image
     :param mean: list: formatted [mu_y, mu_x] describes the location of the mean of the Gaussian corner.
     :param cov: 2D array: formatted [[var_y, corr], [corr, var_x]] describes the covariance of the Gaussian corner.
     :return: heatmap image of size <img_size> with spatial probabilities between 0 and 1.
     """
     heatmap = np.zeros(img_size, dtype=np.float32)
+
+    # Create the gaussian for the corner described
     g = multivariate_normal(mean=mean, cov=cov, allow_singular=True)
 
+    # Identify the region of interest (ROI) within the image where values change most
     roi_box = find_roi(img_size, mean, cov)
-    # Note that we subtract small value to avoid fencepost issues with extremely low covariances.
-    positions = np.dstack(np.mgrid[roi_box[1] + 1:roi_box[3] + 2, roi_box[0] + 1:roi_box[2] + 2]) - _SMALL_VAL
 
+    # Calculate the cdf probability within the region of interest
+    # Note that we subtract small value on the ROI to avoid fencepost issues with extremely low covariances.
+    positions = np.dstack(np.mgrid[roi_box[1] + 1:roi_box[3] + 2, roi_box[0] + 1:roi_box[2] + 2]) - _SMALL_VAL
     prob = g.cdf(positions)
 
     if len(prob.shape) == 1:
         prob.shape = (roi_box[3] + 1 - roi_box[1], roi_box[2] + 1 - roi_box[0])
 
+    # Fill the the heatmap image probabilities as appropriate for approximating.
+    # Probabilities within the ROI equal the calculated probabilities
     heatmap[roi_box[1]:roi_box[3]+1, roi_box[0]:roi_box[2]+1] = prob
+    # Probabilities to the right of the ROI equal the column values of the extreme right edge of the ROI
     heatmap[roi_box[3]:, roi_box[0]:roi_box[2]+1] = np.array(heatmap[roi_box[3], roi_box[0]:roi_box[2]+1], ndmin=2)
+    # Probabilities below the ROI equal the row values of the extreme bottom edge of the ROI
     heatmap[roi_box[1]:roi_box[3]+1, roi_box[2]:] = np.array(heatmap[roi_box[1]:roi_box[3]+1, roi_box[2]], ndmin=2).T
+    # Probabilities to the bottom-right of the ROI equals 1
     heatmap[roi_box[3]+1:, roi_box[2]+1:] = 1.0
 
     # If your region of interest includes outside the main image, remove probability of existing outside the image
@@ -209,7 +271,7 @@ def gen_single_heatmap(img_size, mean, cov):
         prob_outside_y[0, roi_box[2] + 1:] = prob_outside_y[0, roi_box[2]]
         heatmap -= prob_outside_y
 
-    # If we've subtracted twice, we need to re-add the probability of the far corner
+    # If we've subtracted twice, we need to re-add the probability of the far top-left corner
     if roi_box[0] == 0 and roi_box[1] == 0:
         heatmap += g.cdf([[[0 - _SMALL_VAL, 0 - _SMALL_VAL]]])
 

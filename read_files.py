@@ -1,3 +1,9 @@
+"""
+Any time COCO data is read, we convert to GroundTruthInstances and DetectionInstances.
+We require official COCO code to be downloaded and installed. Link to code: https://github.com/cocodataset/cocoapi
+System path must be appended to include location of PythonAPI.
+"""
+
 import numpy as np
 from data_holders import GroundTruthInstance, PBoxDetInst, BBoxDetInst
 import json
@@ -6,8 +12,8 @@ from itertools import islice
 import sys
 # TODO update to be less of a hack
 # Temp way to get access to COCO code for now
-sys.path.append('/home/davidhall/Documents/postdoc_2018-2020/projects/rvc_new_metrics_sandbox/sandbox/'
-           'evaluator_tools/metric_downloaded_code/cocoapi/PythonAPI/')
+sys.path.append('/mnt/storage_device/postdoc_2018-2020/projects/rvc_new_metrics_sandbox/sandbox/'
+                'evaluator_tools/metric_downloaded_code/cocoapi/PythonAPI')
 from pycocotools.coco import COCO
 
 
@@ -66,6 +72,13 @@ def read_pbox_json(filename, gt_class_ids, get_img_names=False, get_class_names=
 class BBoxLoader:
 
     def __init__(self, dict_dets, class_assoc, n_imgs=None, label_threshold=0):
+        """
+        Initialiser for BBoxLoader object which reads in BBoxDetInst detections from dictionary detection information
+        :param dict_dets: dictionary of detection information
+        :param class_assoc: class association dictionary
+        :param n_imgs: number of images loading detections for out of all available for a sequence
+        :param label_threshold: label threshold to apply to detections when determining whether to keep them
+        """
         self.dict_dets = dict_dets
         self.class_assoc = class_assoc
         self.n_imgs = n_imgs
@@ -95,6 +108,14 @@ class BBoxLoader:
 class PBoxLoader:
 
     def __init__(self, dict_dets, class_assoc, n_imgs=None, override_cov=None, label_threshold=0):
+        """
+        Initialiser for PBoxLoader object which reads in PBoxDetInst detections from dictionary detection information
+        :param dict_dets: dictionary of detection information
+        :param class_assoc: class association dictionary
+        :param n_imgs: number of images loading detections for out of all available for a sequence
+        :param override_cov: set covariance used to make spherical Gaussian corners (above zero)
+        :param label_threshold: label threshold to apply to detections when determining whether to keep them
+        """
         self.dict_dets = dict_dets
         self.class_assoc = class_assoc
         self.n_imgs = n_imgs
@@ -125,6 +146,8 @@ class PBoxLoader:
 
 
 def patch_image_size(coco_gt, detections_file):
+    # Function probably obsolete from old detection file format.
+    # TODO remove function if necessary
     coco_obj = COCO(coco_gt)
 
     with open(detections_file, 'r') as fp:
@@ -140,17 +163,28 @@ def patch_image_size(coco_gt, detections_file):
 
 
 def read_COCO_gt(filename, n_imgs=None, ret_img_sizes=False, ret_classes=False):
+    """
+    Function for reading COCO ground-truth files and converting them to GroundTruthInstances format.
+    :param filename: filename of the annotation.json file with all COCO ground-truth annotations
+    :param n_imgs: number of images ground-truth is being extracted from. If None extract all (default None)
+    :param ret_img_sizes: Boolean flag dictating if the image sizes should be returned
+    :param ret_classes: Boolean flag dictating if the class mapping dictionary should be returned
+    :return: ground-truth instances as GTLoader and optionally image sizes or class mapping dictionary if requested
+    """
 
     # read the json file
     coco_obj = COCO(filename)
 
-    # Create location for gt_instances for each image to be stored
     gt_instances = GTLoader(coco_obj, n_imgs)
+
+    # Return image sizes if requested
     if ret_img_sizes:
         return gt_instances, [
             [coco_obj.imgs[img_id]['height'], coco_obj.imgs[img_id]['width']]
             for img_id in sorted(coco_obj.imgs.keys())
         ]
+
+    # Return class mapping dictionary if requested
     if ret_classes:
         return gt_instances, {
             coco_obj.cats[cat_id]['name']: idx
@@ -162,6 +196,12 @@ def read_COCO_gt(filename, n_imgs=None, ret_img_sizes=False, ret_classes=False):
 class GTLoader:
 
     def __init__(self, coco_obj, n_imgs):
+        """
+        Initialisation function for GTLoader object which loads ground-truth annotations from COCO and
+        produces GroundTruthInstance objects.
+        :param coco_obj: ground-truth object for all images in COCO annotation format
+        :param n_imgs: number of images ground-truth is being extracted from. If None extract all
+        """
         self.coco_obj = coco_obj
         self.n_imgs = n_imgs
 
@@ -171,11 +211,13 @@ class GTLoader:
     def __iter__(self):
         coco_annotations = self.coco_obj.imgToAnns
         img_ids = sorted(self.coco_obj.imgs.keys())
+
         # Create map to transfer from category id to index id (used as class id in our tests)
         ann_idx_map = {
             cat_id: idx
             for idx, cat_id in enumerate(sorted(self.coco_obj.cats.keys()))
         }
+
         if self.n_imgs is not None:
             img_id_iter = islice(img_ids, 0, self.n_imgs)
         else:
@@ -194,6 +236,7 @@ class GTLoader:
                     for annotation in coco_annotations[img_id]
                     if 'segmentation' in annotation.keys()
                 ]
+
                 # extract segmentation masks for each annotation
                 seg_masks = [self.coco_obj.annToMask(annotation) for annotation in img_annotations]
                 # extract the class ids for each annotation (note that we subtract 1 so that class ids start at 0)
@@ -202,11 +245,14 @@ class GTLoader:
                 ignores = [annotation['ignore'] if 'ignore' in annotation.keys() else False for annotation in img_annotations ]
                 iscrowds = [annotation['iscrowd'] for annotation in img_annotations]
                 areas = [annotation['area'] for annotation in img_annotations]
+
+                # transform bbox to [x1, y1, x2, y2] format
                 for annotation in img_annotations:
                     box = annotation['bbox']
                     box[2] += box[0]
                     box[3] += box[1]
                     bboxes.append(box)
+
                 # generate ground truth instances from the COCO annotation information
                 # NOTE this will skip any annotation which has a bad segmentation mask (all zeros)
                 yield [
@@ -223,11 +269,19 @@ class GTLoader:
 
 
 def convert_coco_det_to_rvc_det(det_filename, gt_filename, save_filename):
+    """
+    Function for converting COCO format detection file into RVC1 format detection file
+    :param det_filename: filename for original detections in COCO format
+    :param gt_filename: filename for ground-truth in COCO format
+    :param save_filename: filename where detections in RVC1 format will be saved
+    :return: None
+    """
     coco_obj = COCO(gt_filename)
 
     with open(det_filename, 'r') as fp:
         det_coco_dicts = json.load(fp)
 
+    # Extract primary information
     gt_img_ids = sorted(coco_obj.imgs.keys())
     det_img_ids = np.array([det_dict['image_id'] for det_dict in det_coco_dicts])
     rvc1_dets = []
@@ -236,16 +290,22 @@ def convert_coco_det_to_rvc_det(det_filename, gt_filename, save_filename):
         cat_id: idx
         for idx, cat_id in enumerate(sorted(coco_obj.cats.keys()))
     }
+
+    # Assume covariances will be zero (BBox detections)
     empty_covars = [[[0, 0], [0, 0]], [[0, 0], [0, 0]]]
+
     # Go through all images in coco gt and make det inputs for them
     for img_idx, img_id in enumerate(gt_img_ids):
         img_coco_dets = [det_coco_dicts[idx] for idx in np.argwhere(det_img_ids == img_id).flatten()]
         img_rvc1_dets = []
         for det_idx, det in enumerate(img_coco_dets):
-            # TODO Note currently assumes the detection has a bbox entry
+            # Note, currently assumes the detection has a bbox entry.
+            # Transform to [x1, y1, x2, y2] format
             box = det['bbox']
             box[2] += box[0]
             box[3] += box[1]
+
+            # Extract score of chosen class and distribute remaining probability across all others
             label_probs = np.ones(len(class_list)) * ((1 - det['score'])/(len(class_list)-1))
             label_probs[ann_idx_map[det['category_id']]] = det['score']
             det_dict = {'bbox': box, 'covars': empty_covars, "label_probs": list(label_probs.astype(float))}
@@ -253,6 +313,8 @@ def convert_coco_det_to_rvc_det(det_filename, gt_filename, save_filename):
 
         rvc1_dets.append(img_rvc1_dets)
     save_dict = {'classes': class_list, "detections": rvc1_dets}
+
+    # Save detections in rvc1 format
     with open(save_filename, 'w') as f:
         json.dump(save_dict, f)
 
@@ -260,9 +322,9 @@ def convert_coco_det_to_rvc_det(det_filename, gt_filename, save_filename):
 def are_classes_same(class_1, class_2):
     """
     Synonym handling
-    :param class_1:
-    :param class_2:
-    :return:
+    :param class_1: First class name string
+    :param class_2: Second class name string
+    :return: Boolean dictating if two class name strings are equivalent
     """
     class_1 = class_1.lower()
     class_2 = class_2.lower()
