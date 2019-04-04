@@ -10,10 +10,9 @@ import json
 import time
 from itertools import islice
 import sys
-# TODO update to be less of a hack
+
 # Temp way to get access to COCO code for now
-sys.path.append('/mnt/storage_device/postdoc_2018-2020/projects/rvc_new_metrics_sandbox/sandbox/'
-                'evaluator_tools/metric_downloaded_code/cocoapi/PythonAPI')
+sys.path.append('path/to/COCO/PythonAPI/')
 from pycocotools.coco import COCO
 
 
@@ -50,7 +49,6 @@ def read_pbox_json(filename, gt_class_ids, get_img_names=False, get_class_names=
     gt_ids = [class_association[idx] for idx in det_ids]
     num_classes = max(class_id for class_id in gt_class_ids.values()) + 1
 
-    # TODO made funcitonality for changing number of image's detections are loaded but not checked all implications
     # create a detection instance for each detection described by dictionaries in dict_dets
     if override_cov == 0:
         det_instances = BBoxLoader(data_dict['detections'], (gt_ids, det_ids, num_classes), n_imgs, label_threshold)
@@ -143,23 +141,6 @@ class PBoxLoader:
                 for det in img_dets
                 if self.label_threshold <= 0 or max(det['label_probs']) > self.label_threshold
             ]
-
-
-def patch_image_size(coco_gt, detections_file):
-    # Function probably obsolete from old detection file format.
-    # TODO remove function if necessary
-    coco_obj = COCO(coco_gt)
-
-    with open(detections_file, 'r') as fp:
-        data_dict = json.load(fp)
-
-    img_ids = sorted(coco_obj.imgs.keys())
-    for img_idx, img_id in enumerate(img_ids):
-        for det in data_dict['detections'][img_idx]:
-            det['img_size'] = [coco_obj.imgs[img_id]['height'], coco_obj.imgs[img_id]['width']]
-
-    with open(detections_file, 'w') as fp:
-        json.dump(data_dict, fp)
 
 
 def read_COCO_gt(filename, n_imgs=None, ret_img_sizes=False, ret_classes=False):

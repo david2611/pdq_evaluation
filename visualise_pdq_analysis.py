@@ -31,8 +31,9 @@ parser.add_argument('--full_info', action='store_true', help='flag for stating i
                                                              'displayed as part of the figure.')
 parser.add_argument('--img_set', nargs='+', help='list of img files to create visualisations for. '
                                                  'Note that if none is provided, all images are used')
-parser.add_argument('--colour_blind', '-cb', action='store_true',
-                    help='flag for using colour blind mode (orange and blue)')
+parser.add_argument('--colour_mode', choices=['gr', 'bo'], default='bo',
+                    help='Dictate which colour mode you wish to use. gr = green correct, red incorrect.'
+                         'bo = blue correct orange incorrect.')
 parser.add_argument('--corner_mode', default='ellipse', choices=['arrow', 'ellipse'],
                     help='what method for drawing corners is to be used')
 args = parser.parse_args()
@@ -42,7 +43,7 @@ if not os.path.isdir(args.save_folder):
     os.makedirs(args.save_folder)
 
 # Define the colour-scheme to be used in visualisations
-if args.colour_blind:
+if args.colour_mode == 'bo':
     correct_colour = 'blue'
     incorrect_colour = 'C1'     # Orange
 else:
@@ -124,7 +125,6 @@ def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_anal
     img = cv2.merge([r, g, b])
     ratio = img.shape[0]/float(img.shape[1])
     # Set savefile image to be 12 inches max dimension for clarity
-    # TODO find some way of returning to original image size? Looks good this way though
     if ratio <= 1:
         fig_size = (12, 12*ratio)
     else:
