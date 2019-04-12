@@ -1,6 +1,6 @@
 Overview
 ========
-This code is hacky messy code that enables the evaluation of detectors on Common Objects in Context (*COCO*) and 
+This code enables the evaluation of detectors on Common Objects in Context (*COCO*) and 
 Robotic Vision Challenge 1 (*RVC1*) data. Evaluation is performed using mean average precision (*mAP*) as implemented in
 the COCO challenge, mean optimal localisation recall precision (*moLRP*) based metrics, 
 and probabilistic detection quality (*PDQ*) as implemented (mostly) in the RVC1 CVPR2019 challenge.
