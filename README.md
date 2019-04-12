@@ -31,15 +31,14 @@ You can download this API here https://github.com/cocodataset/cocoapi.
 Once this is downloaded and installed, you need to adjust the system path on line 11 of coco_mAP.py and line 15 of 
 read_files.py to match the PythonAPI folder of your COCO API installation.
 
-Install LRP API
----------------
+Add LRP Evaluation Code
+-----------------------
 You will also require code for using LRP evaluation measures.
-You will need a fully installed implementation of their code which uses COCO API somewhere on your machine.
-You can download this here https://github.com/cancam/LRP.
+To do this you need to simply copy the cocoevalLRP.py file from the LRP github repository to the pycocotools folder within the PythonAPI.
+You can download the specific file here https://github.com/cancam/LRP/blob/master/cocoLRPapi-master/PythonAPI/pycocotools/cocoevalLRP.py
+You can clone the original repository here https://github.com/cancam/LRP.
 
-Once this is downloaded and installed, change the name of the pycocotools folder to pycocotools_lrp.
-
-After this, adjust the system path on line 11 of coco_LRP.py to match the PythonAPI folder of your LRP installation.
+After cocoevalLRP.py is located in your pycocotools folder, simply adjust the system path on line 11 of coco_LRP.py to match your PythonAPI folder.
 
 Usage
 =====

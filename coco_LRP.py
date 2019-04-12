@@ -8,9 +8,9 @@ from convert_to_coco_input import generate_coco_ground_truth_and_detections
 import sys
 
 # Temp way to get access to COCO code for now
-sys.path.append('path/to/cocoLRP/PythonAPI/')
-from pycocotools_lrp.cocoevalLRP import COCOevalLRP
-from pycocotools_lrp.coco import COCO
+sys.path.append('path/to/COCO/PythonAPI/')
+from pycocotools.cocoevalLRP import COCOevalLRP
+from pycocotools.coco import COCO
 
 
 def coco_LRP(param_sequence, use_heatmap=True, full=False):
