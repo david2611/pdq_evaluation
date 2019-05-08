@@ -44,7 +44,7 @@ Usage
 =====
 All evaluation code is run on detections saved in .json files formatted as required by the RVC.
 If you are evaluating on COCO data and have saved detections in COCO format, you can convert to RVC1 format using 
-*convert_coco.py*
+*file_convert-coco_to_rvc1.py*
 When you have the appropriate files, you can evaluate on mAP, moLRP, and PDQ with *evaluate.py*.
 After evaluation is complete, you can visualise your detections for a sequence of images w.r.t. PDQ using 
 *visualise_pdq_analysis.py*
@@ -52,11 +52,11 @@ After evaluation is complete, you can visualise your detections for a sequence o
 Evaluation is currently organised so that you can evaluate either on COCO data, or on RVC1 data. Note that RVC1 data
 expects multiple sequences rather than a single folder of data.
 
-convert_coco.py
----------------
+file_convert_coco_to_rvc1.py
+----------------------------
  To convert coco detections to rvc format simply run:
  
- `python convert_coco.py --coco_gt <gt_json_file> --coco_det <det_json_file> --rvc1_det <output_json_file>`
+ `python file_convert_coco_to_rvc1.py --coco_gt <gt_json_file> --coco_det <det_json_file> --rvc1_det <output_json_file>`
  
  where `<gt_json_file>` is the coco format ground-truth json filename, `det_json_file` is the coco format detection 
  json filename, and `output_file` is the json filename you will save your rvc1 formatted detections json file.
