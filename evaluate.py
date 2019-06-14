@@ -29,6 +29,8 @@ parser.add_argument('--set_cov', type=float, help='set covariance for all gt cor
 parser.add_argument('--mAP_heatmap', action='store_true', help='flag for dictating that mAP should be calculated using'
                                                                'outskirts of heatmap rather than the box corner '
                                                                'locations (not used in papers and not recommended)')
+parser.add_argument('--bbox_gt', action='store_true', help='Flag determines if you want to treat GT as bounding boxes'
+                                                           'rather than segmentation masks.')
 args = parser.parse_args()
 
 # Define these before using this code
@@ -87,7 +89,7 @@ def gen_param_sequence():
     # Load GTs and Detections as appropriate for different data sets (multiple sequences or one folder)
     if args.test_set == 'coco':
         # output is a generator of lists of GTInstance objects and a map of gt_class_ids
-        gt_instances, gt_class_ids = read_files.read_COCO_gt(coco_gt_file, ret_classes=True)
+        gt_instances, gt_class_ids = read_files.read_COCO_gt(coco_gt_file, ret_classes=True, bbox_gt=args.bbox_gt)
         det_filename = args.det_loc
 
         # output is a generator of lists of DetectionInstance objects (BBox or PBox depending)
@@ -98,7 +100,7 @@ def gen_param_sequence():
 
     elif args.test_set == 'rvc1':
         # output is a list of generator of generators of GTInstance objects
-        all_gt_instances = rvc1_gt_loader.read_ground_truth(rvc1_gt_folder)
+        all_gt_instances = rvc1_gt_loader.read_ground_truth(rvc1_gt_folder, bbox_gt=args.bbox_gt)
         all_det_instances = rvc1_submission_loader.read_submission(args.det_loc,
                                                                    ["{0:06d}".format(idx) for idx in range(_NUM_VALID)])
         filter_gt = True

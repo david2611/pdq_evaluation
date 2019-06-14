@@ -15,11 +15,12 @@ import json
 import cv2
 import data_holders
 import rvc1_class_list
+import numpy as np
 
 
 
 
-def read_ground_truth(directory, one_sequence=False):
+def read_ground_truth(directory, one_sequence=False, bbox_gt=False):
     """
     Read all the ground truth from all the sequences in the given folder.
     Each sequence is a folder containing a json file and some number of mask images
@@ -43,13 +44,13 @@ def read_ground_truth(directory, one_sequence=False):
     :return: sequences: dictionary of sequence gt generators
     """
     if one_sequence:
-        sequences = [SequenceGTLoader(directory)]
+        sequences = [SequenceGTLoader(directory, bbox_gt=bbox_gt)]
         return sequences
     sequences = []
     for sequence_dir in sorted(os.listdir(directory)):
         sequence_path = os.path.join(directory, sequence_dir)
         if os.path.isdir(sequence_path) and os.path.isfile(os.path.join(sequence_path, 'labels.json')):
-            sequences.append(SequenceGTLoader(sequence_path))
+            sequences.append(SequenceGTLoader(sequence_path, bbox_gt=bbox_gt))
     return sequences
 
 
@@ -101,8 +102,9 @@ class SequenceGTLoader:
     :return: sequence_generator: generator for the gt of a given sequence over all images in that sequence.
     Note that the sequence_generator produces an image gt generator over all gt instances in that image.
     """
-    def __init__(self, sequence_directory):
+    def __init__(self, sequence_directory, bbox_gt=False):
         self._sequence_directory = sequence_directory
+        self._bbox_gt = bbox_gt
         with open(os.path.join(sequence_directory, 'labels.json'), 'r') as fp:
             self._labels = json.load(fp)
 
@@ -117,16 +119,18 @@ class SequenceGTLoader:
 
                 yield ImageGTLoader(
                     image_data=self._labels[image_name],
-                    masks=mask_im[:, :, 0]
+                    masks=mask_im[:, :, 0],
+                    bbox_gt=self._bbox_gt
                 )
             else:
                 yield []
 
 
 class ImageGTLoader:
-    def __init__(self, image_data, masks):
+    def __init__(self, image_data, masks, bbox_gt=False):
         self._image_data = image_data
         self._masks = masks
+        self._bbox_gt = bbox_gt
 
     def __len__(self):
         return len(self._image_data)
@@ -146,9 +150,17 @@ class ImageGTLoader:
                     class_id = rvc1_class_list.get_class_id(detection_data['class'])
                     if class_id is not None:
                         mask_id = int(detection_data['mask_id'])
+                        bbox = [int(v) for v in detection_data.get('bounding_box', [])]
+                        if self._bbox_gt:
+                            # TODO check _masks.shape and just use it if possible
+                            seg_mask = np.zeros((self._masks.shape[0], self._masks.shape[1]), dtype=np.bool)
+                            seg_mask[bbox[1]:bbox[3]+1, bbox[0]:bbox[2]+1] = True
+                        else:
+                            seg_mask = (self._masks == mask_id)
+
                         yield data_holders.GroundTruthInstance(
                             true_class_label=class_id,
-                            segmentation_mask=(self._masks == mask_id),
-                            coco_bounding_box=[int(v) for v in detection_data.get('bounding_box', [])],
+                            segmentation_mask=seg_mask,
+                            coco_bounding_box=bbox,
                             num_pixels=int(detection_data.get('num_pixels', -1))
                         )

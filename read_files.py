@@ -10,13 +10,14 @@ import json
 import time
 from itertools import islice
 import sys
+from utils import generate_bounding_box_from_mask
 
 # Temp way to get access to COCO code for now
-sys.path.append('path/to/COCO/PythonAPI/')
+sys.path.append('/media/david/storage_device/postdoc_2018-2020/projects/rvc_new_metrics_sandbox/sandbox/evaluator_tools/metric_downloaded_code/cocoapi/PythonAPI/')
 from pycocotools.coco import COCO
 
 
-def read_pbox_json(filename, gt_class_ids, get_img_names=False, get_class_names=False, n_imgs=None,
+def read_pbox_json(filename, gt_class_ids=None, get_img_names=False, get_class_names=False, n_imgs=None,
                    override_cov=None, label_threshold=0):
     """
     The following function reads a json file design to describe detections which can be expressed as
@@ -41,13 +42,20 @@ def read_pbox_json(filename, gt_class_ids, get_img_names=False, get_class_names=
     # Associate detection classes to ground truth classes, to get the order right
     class_association = {}
     for det_idx, det_class in enumerate(data_dict['classes']):
-        for gt_class in gt_class_ids.keys():
-            if are_classes_same(det_class, gt_class):
-                class_association[det_idx] = gt_class_ids[gt_class]
-                break
+        # TODO Check this hack
+        if gt_class_ids is None:
+            class_association[det_idx] = det_idx
+        else:
+            for gt_class in gt_class_ids.keys():
+                if are_classes_same(det_class, gt_class):
+                    class_association[det_idx] = gt_class_ids[gt_class]
+                    break
     det_ids = sorted(class_association.keys())
     gt_ids = [class_association[idx] for idx in det_ids]
-    num_classes = max(class_id for class_id in gt_class_ids.values()) + 1
+    if gt_class_ids is None:
+        num_classes = len(data_dict['classes'])
+    else:
+        num_classes = max(class_id for class_id in gt_class_ids.values()) + 1
 
     # create a detection instance for each detection described by dictionaries in dict_dets
     if override_cov == 0:
@@ -143,7 +151,7 @@ class PBoxLoader:
             ]
 
 
-def read_COCO_gt(filename, n_imgs=None, ret_img_sizes=False, ret_classes=False):
+def read_COCO_gt(filename, n_imgs=None, ret_img_sizes=False, ret_classes=False, bbox_gt=False):
     """
     Function for reading COCO ground-truth files and converting them to GroundTruthInstances format.
     :param filename: filename of the annotation.json file with all COCO ground-truth annotations
@@ -156,7 +164,7 @@ def read_COCO_gt(filename, n_imgs=None, ret_img_sizes=False, ret_classes=False):
     # read the json file
     coco_obj = COCO(filename)
 
-    gt_instances = GTLoader(coco_obj, n_imgs)
+    gt_instances = GTLoader(coco_obj, n_imgs, bbox_gt=bbox_gt)
 
     # Return image sizes if requested
     if ret_img_sizes:
@@ -176,7 +184,7 @@ def read_COCO_gt(filename, n_imgs=None, ret_img_sizes=False, ret_classes=False):
 
 class GTLoader:
 
-    def __init__(self, coco_obj, n_imgs):
+    def __init__(self, coco_obj, n_imgs, bbox_gt=False):
         """
         Initialisation function for GTLoader object which loads ground-truth annotations from COCO and
         produces GroundTruthInstance objects.
@@ -185,6 +193,7 @@ class GTLoader:
         """
         self.coco_obj = coco_obj
         self.n_imgs = n_imgs
+        self.bbox_gt = bbox_gt
 
     def __len__(self):
         return len(self.coco_obj.imgs) if self.n_imgs is None else self.n_imgs
@@ -217,22 +226,34 @@ class GTLoader:
                     for annotation in coco_annotations[img_id]
                     if 'segmentation' in annotation.keys()
                 ]
-
-                # extract segmentation masks for each annotation
-                seg_masks = [self.coco_obj.annToMask(annotation) for annotation in img_annotations]
                 # extract the class ids for each annotation (note that we subtract 1 so that class ids start at 0)
                 class_ids = [annotation['category_id'] for annotation in img_annotations]
                 bboxes = []
+                seg_masks = []
                 ignores = [annotation['ignore'] if 'ignore' in annotation.keys() else False for annotation in img_annotations ]
                 iscrowds = [annotation['iscrowd'] for annotation in img_annotations]
                 areas = [annotation['area'] for annotation in img_annotations]
 
-                # transform bbox to [x1, y1, x2, y2] format
                 for annotation in img_annotations:
+                    # transform bbox to [x1, y1, x2, y2]
                     box = annotation['bbox']
                     box[2] += box[0]
                     box[3] += box[1]
                     bboxes.append(box)
+
+                    # TODO Check below is working as expected
+                    # define GT segmentation mask
+                    # If segmentation mask is expected to be pixels within bounding box, adjust accordingly
+                    seg_mask = self.coco_obj.annToMask(annotation)
+                    if self.bbox_gt:
+                        eval_mask = np.zeros(seg_mask.shape, dtype=np.bool)
+                        # TODO update below to be smarter than this and just use box not seg_bbox
+                        # Note use seg_bbox for simplicity rather than trying to account for rounding in box
+                        seg_bbox = generate_bounding_box_from_mask(seg_mask)
+                        eval_mask[seg_bbox[1]:seg_bbox[3]+1, seg_bbox[0]:seg_bbox[2]+1] = True
+                        seg_masks.append(eval_mask)
+                    else:
+                        seg_masks.append(seg_mask)
 
                 # generate ground truth instances from the COCO annotation information
                 # NOTE this will skip any annotation which has a bad segmentation mask (all zeros)
