@@ -1,5 +1,5 @@
 import utils
-from data_holders import PBoxDetInst, BBoxDetInst
+from data_holders import PBoxDetInst, BBoxDetInst, MaskRCNNDetInst
 
 _HEATMAP_THRESH = 0.00135
 _BLANK_IMG_SHAPE = [100, 100]
@@ -33,7 +33,7 @@ def generate_coco_ground_truth_and_detections(param_sequence, use_heatmap=True):
     coco_img_ids = []
 
     # go through each image to create gt dict and det list of dicts
-    for img_idx, (img_gt_instances, img_det_instances, _) in enumerate(param_sequence):
+    for img_idx, (img_gt_instances, img_det_instances, _1, _2) in enumerate(param_sequence):
 
         # Handle images with no gt instances
         if len(img_gt_instances) == 0:
@@ -81,7 +81,10 @@ def generate_coco_ground_truth_and_detections(param_sequence, use_heatmap=True):
 
         # Create coco detections for each detection in this image
         for det_idx, det_instance in enumerate(img_det_instances):
-            coco_det_class = int(det_instance.get_max_class() + 1)
+            if isinstance(det_instance, MaskRCNNDetInst):
+                coco_det_class = det_instance.chosen_label
+            else:
+                coco_det_class = int(det_instance.get_max_class() + 1)
             coco_det_score = float(det_instance.get_max_score())
             coco_det_img = img_idx + 1
 
@@ -90,7 +93,7 @@ def generate_coco_ground_truth_and_detections(param_sequence, use_heatmap=True):
                 coco_det_box = utils.generate_bounding_box_from_mask(
                     det_instance.calc_heatmap(img_gt_instances[0].segmentation_mask.shape) > _HEATMAP_THRESH)
             else:
-                if isinstance(det_instance, PBoxDetInst) or isinstance(det_instance, BBoxDetInst):
+                if isinstance(det_instance, (PBoxDetInst, BBoxDetInst, MaskRCNNDetInst)):
                     coco_det_box = [float(boxval) for boxval in det_instance.box]
                 else:
                     raise ValueError("Cannot create bbox for detection! Not using heatmap, PBoxDetInst, or BBoxDetInst")

@@ -5,12 +5,13 @@ System path must be appended to include location of PythonAPI.
 """
 
 import numpy as np
-from data_holders import GroundTruthInstance, PBoxDetInst, BBoxDetInst
+from data_holders import GroundTruthInstance, PBoxDetInst, BBoxDetInst, MaskRCNNDetInst
 import json
 import time
 from itertools import islice
 import sys
 from utils import generate_bounding_box_from_mask
+import os.path as osp
 
 # Temp way to get access to COCO code for now
 sys.path.append('/media/david/storage_device/postdoc_2018-2020/projects/rvc_new_metrics_sandbox/sandbox/evaluator_tools/metric_downloaded_code/cocoapi/PythonAPI/')
@@ -18,7 +19,7 @@ from pycocotools.coco import COCO
 
 
 def read_pbox_json(filename, gt_class_ids=None, get_img_names=False, get_class_names=False, n_imgs=None,
-                   override_cov=None, label_threshold=0):
+                   override_cov=None, label_threshold=0, mask_rcnn=False):
     """
     The following function reads a json file design to describe detections which can be expressed as
     probabilistic bounding boxes and return a list of list of detection instances for each image,
@@ -58,7 +59,10 @@ def read_pbox_json(filename, gt_class_ids=None, get_img_names=False, get_class_n
         num_classes = max(class_id for class_id in gt_class_ids.values()) + 1
 
     # create a detection instance for each detection described by dictionaries in dict_dets
-    if override_cov == 0:
+
+    if mask_rcnn:
+        det_instances = MaskRCNNLoader(data_dict['detections'], (gt_ids, det_ids, num_classes), filename, n_imgs, label_threshold)
+    elif override_cov == 0:
         det_instances = BBoxLoader(data_dict['detections'], (gt_ids, det_ids, num_classes), n_imgs, label_threshold)
     else:
         det_instances = PBoxLoader(data_dict['detections'], (gt_ids, det_ids, num_classes), n_imgs,
@@ -111,6 +115,7 @@ class BBoxLoader:
             ]
 
 
+# TODO Change to generic detection loader which handles BBox, PBox, ProbMask definitions
 class PBoxLoader:
 
     def __init__(self, dict_dets, class_assoc, n_imgs=None, override_cov=None, label_threshold=0):
@@ -139,14 +144,70 @@ class PBoxLoader:
         else:
             dets_iter = iter(self.dict_dets)
         for img_id, img_dets in enumerate(dets_iter):
-            yield [PBoxDetInst(
-                class_list=reorder_classes(det['label_probs'], self.class_assoc),
-                # Removed clamping boxes for detection output standardization for now.
-                # box=clamp_bbox(det['bbox'], det['img_size']),
-                box=det['bbox'],
-                covs=det['covars'] if self.cov_mat is None else self.cov_mat
-            )
+
+            yield [
+                PBoxDetInst(
+                    class_list=reorder_classes(det['label_probs'], self.class_assoc),
+                    # Removed clamping boxes for detection output standardization for now.
+                    # box=clamp_bbox(det['bbox'], det['img_size']),
+                    box=det['bbox'],
+                    covs=det['covars'] if self.cov_mat is None else self.cov_mat
+                )
+
+                # TODO Check and confirm this new catch works as desired
+                # Catch any detections with zero covariance or no covariance given
+                # TODO double check if covars key check is necessary
+                if self.cov_mat is not None and ('covars' not in det or np.sum(det['covars']) == 0)
+                else
+                # Create standard bounding boxes if that is the case
+                BBoxDetInst(
+                    class_list=reorder_classes(det['label_probs'], self.class_assoc),
+                    box=det['bbox']
+                )
                 for det in img_dets
+                # Ignore detections below given label threshold if provided
+                if self.label_threshold <= 0 or max(det['label_probs']) > self.label_threshold
+            ]
+
+
+class MaskRCNNLoader:
+    def __init__(self, dict_dets, class_assoc, det_filename, n_imgs=None, label_threshold=0):
+        """
+        Initialiser for MaskRCNNLoader object which reads in MaskRCNNDetInst detections from dictionary detection
+        information
+        :param dict_dets: dictionary of detection information
+        :param class_assoc: class association dictionary
+        :param det_filename: filename used for loading detections (needed for determining path to mask imgs)
+        :param n_imgs: number of images loading detections for out of all available for a sequence
+        :param label_threshold: label threshold to apply to detections when determining whether to keep them
+        """
+        self.dict_dets = dict_dets
+        self.class_assoc = class_assoc
+        self.n_imgs = n_imgs
+        self.label_threshold = float(label_threshold)
+        self.det_filename = det_filename
+
+    def __len__(self):
+        return len(self.dict_dets) if self.n_imgs is None else self.n_imgs
+
+    def __iter__(self):
+        if self.n_imgs is not None:
+            dets_iter = islice(self.dict_dets, start=0, stop=self.n_imgs)
+        else:
+            dets_iter = iter(self.dict_dets)
+        for img_id, img_dets in enumerate(dets_iter):
+            yield [
+                MaskRCNNDetInst(
+                    class_list=reorder_classes(det['label_probs'], self.class_assoc),
+                    chosen_label=det['label'],
+                    mask_id=det['mask_id'],
+                    detection_file=det['mask'],
+                    # Only provide a mask root if path given is not absolute
+                    mask_root='' if osp.isabs(det['mask']) else osp.dirname(osp.abspath(self.det_filename)),
+                    box=det['bbox']
+                )
+                for det in img_dets
+                # TODO decide if label_threshold should be applied to label_probs or the chosen label
                 if self.label_threshold <= 0 or max(det['label_probs']) > self.label_threshold
             ]
 

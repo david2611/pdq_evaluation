@@ -25,10 +25,10 @@ class PDQ(object):
     Extension of the code used in the 1st robotic vision challenge (RVC1) code.
     Link to RVC1 PDQ code: https://github.com/jskinn/rvchallenge-evaluation/blob/master/pdq.py
     """
-    def __init__(self, filter_small=False):
+    # TODO update so the decision to ignore small GTs and use segment mode is a parameter of the object and not a lsit of the same parameter in score
+    def __init__(self):
         """
         Initialisation function for PDQ evaluator.
-        :param filter_small: Flag defining if small objects should be ignored (as done in RVC1)
         """
         super(PDQ, self).__init__()
         self._tot_overall_quality = 0.0
@@ -39,7 +39,6 @@ class PDQ(object):
         self._tot_TP = 0
         self._tot_FP = 0
         self._tot_FN = 0
-        self._filter_small = filter_small
         self._det_evals = []
         self._gt_evals = []
 
@@ -188,10 +187,11 @@ class PDQ(object):
         return self._tot_TP, self._tot_FP, self._tot_FN
 
 
-def _get_image_evals(pair):
+def _get_image_evals(parameters):
     """
     Evaluate the results for a given image
-    :param pair: tuple containing list of GroundTruthInstances and DetectionInstances for the given image respectively
+    :param parameters: tuple containing list of GroundTruthInstances, DetectionInstances,
+     filter_gt boolean flag and segment_mode boolean flag for the given image respectively
     :return: results dictionary containing total overall spatial quality, total spatial quality on positively assigned
     detections, total label quality on positively assigned detections, total foreground spatial quality on positively
     assigned detections, total background spatial quality on positively assigned detections, number of true positives,
@@ -202,22 +202,24 @@ def _get_image_evals(pair):
     'FP': <num_false_positives>, 'FN': <num_false_positives>, 'img_det_evals':<detection_evaluation_summary>,
     'img_gt_evals':<ground-truth_evaluation_summary>}
     """
-    gt_instances, det_instances, filter_gt = pair
-    results = _calc_qual_img(gt_instances, det_instances, filter_gt)
+    gt_instances, det_instances, filter_gt, segment_mode = parameters
+    results = _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode)
     return results
 
 
-def _vectorize_img_gts(gt_instances, img_shape):
+def _vectorize_img_gts(gt_instances, img_shape, segment_mode):
     """
     Vectorizes the required elements for all GroundTruthInstances as necessary for a given image.
     These elements are the segmentation mask, background mask, number of foreground pixels, and label for each.
     :param gt_instances: list of all GroundTruthInstances for a given image
     :param img_shape: shape of the image that the GroundTruthInstances lie within
+    :param segment_mode: boolean describing if we are in segment mode or not. If so, then the background region is
+    outside the ground-truth segmentation mask and if not, it is the region outside the ground-truth bounding box.
     :return: (gt_seg_mat, bg_seg_mat, num_fg_pixels_vec, gt_label_vec).
     gt_seg_mat: h x w x g boolean numpy array depicting the ground truth pixels for each of the g GroundTruthInstances
     within an h x w image.
     bg_seg_mat: h x w x g boolean numpy array depicting the background pixels for each of the g GroundTruthInstances
-    (pixels outside the bounding box) within an h x w image.
+    (pixels outside the segmentation mask or bounding box depending on mode) within an h x w image.
     num_fg_pixels_vec: g x 1 int numpy array containing the number of foreground (object) pixels for each of
     the g GroundTruthInstances.
     gt_label_vec: g, numpy array containing the class label as an integer for each of the g GroundTruthInstances
@@ -226,10 +228,13 @@ def _vectorize_img_gts(gt_instances, img_shape):
     num_fg_pixels_vec = np.array([[gt_instance.num_pixels] for gt_instance in gt_instances], dtype=np.int)  # g x 1
     gt_label_vec = np.array([gt_instance.class_label for gt_instance in gt_instances], dtype=np.int)        # g,
 
-    bg_seg_mat = np.ones(img_shape + (len(gt_instances),), dtype=np.bool)  # h x w x g
-    for gt_idx, gt_instance in enumerate(gt_instances):
-        gt_box = gt_instance.bounding_box
-        bg_seg_mat[gt_box[1]:gt_box[3]+1, gt_box[0]:gt_box[2]+1, gt_idx] = False
+    if segment_mode:
+        bg_seg_mat = np.logical_not(gt_seg_mat)
+    else:
+        bg_seg_mat = np.ones(img_shape + (len(gt_instances),), dtype=np.bool)  # h x w x g
+        for gt_idx, gt_instance in enumerate(gt_instances):
+            gt_box = gt_instance.bounding_box
+            bg_seg_mat[gt_box[1]:gt_box[3]+1, gt_box[0]:gt_box[2]+1, gt_idx] = False
 
     return gt_seg_mat, bg_seg_mat, num_fg_pixels_vec, gt_label_vec
 
@@ -343,7 +348,7 @@ def _calc_overall_qual(label_qual, spatial_qual):
     return overall_qual_mat
 
 
-def _gen_cost_tables(gt_instances, det_instances):
+def _gen_cost_tables(gt_instances, det_instances, segment_mode):
     """
     Generate the cost tables containing the cost values (1 - quality) for each combination of ground truth objects and
     detections within a given image.
@@ -364,7 +369,7 @@ def _gen_cost_tables(gt_instances, det_instances):
     img_shape = gt_instances[0].segmentation_mask.shape
 
     # Generate all the matrices needed for calculations
-    gt_seg_mat, bg_seg_mat, num_fg_pixels_vec, gt_label_vec = _vectorize_img_gts(gt_instances, img_shape)
+    gt_seg_mat, bg_seg_mat, num_fg_pixels_vec, gt_label_vec = _vectorize_img_gts(gt_instances, img_shape, segment_mode)
     img_shape = gt_instances[0].segmentation_mask.shape
     det_seg_heatmap_mat, det_label_prob_mat = _vectorize_img_dets(det_instances, img_shape)
 
@@ -402,7 +407,7 @@ def _gen_cost_tables(gt_instances, det_instances):
             'fg': fg_cost_table, 'bg': bg_cost_table}
 
 
-def _calc_qual_img(gt_instances, det_instances, filter_gt):
+def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode):
     """
     Calculates the sum of qualities for the best matches between ground truth objects and detections for an image.
     Each ground truth object can only be matched to a single detection and vice versa as an object-detection pair.
@@ -457,7 +462,7 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt):
 
     # For each possible pairing, calculate the quality of that pairing and convert it to a cost
     # to enable use of the Hungarian algorithm.
-    cost_tables = _gen_cost_tables(gt_instances, det_instances)
+    cost_tables = _gen_cost_tables(gt_instances, det_instances, segment_mode)
 
     # Use the Hungarian algorithm with the cost table to find the best match between ground truth
     # object and detection (lowest overall cost representing highest overall pairwise quality)

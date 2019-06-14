@@ -3,6 +3,7 @@ import utils
 import numpy as np
 from scipy.stats import multivariate_normal
 from scipy.spatial.distance import cdist
+import os.path as osp
 
 _HEATMAP_THRESH = 0.0027
 _2D_MAH_DIST_THRESH = 3.439
@@ -81,6 +82,50 @@ class DetectionInstance(object):
         :return: maximum class score of the detection
         """
         return np.amax(self.class_list)
+
+
+class MaskRCNNDetInst(DetectionInstance):
+    def __init__(self, class_list, detection_file, chosen_label, mask_id, box, mask_root=''):
+        """
+        Initialisation function for detection instance where full instance heatmap is available on file
+        :param class_list: list of label probabilities for each class, ordered to match the class labelling convention
+        of corresponding ground-truth data.
+        :param detection_file: location of the .npy file containing the instance's heatmap
+        :param mask_root: root location for all mask files (defaults to current directory)
+        """
+        super(MaskRCNNDetInst, self).__init__(class_list)
+        self.detection_file = detection_file
+        self.chosen_label = chosen_label
+        self.mask_id = mask_id
+        self.mask_root = mask_root
+        self.box = box
+
+    def calc_heatmap(self, img_size):
+        """
+        :param img_size: size of the image expected from the heatmap output.
+        :return: spatial probability heatmap of the size <img_size>
+        """
+        all_heatmaps = np.load(osp.join(self.mask_root, self.detection_file))
+
+        if len(all_heatmaps.shape) > 2:
+            heatmap = all_heatmaps[self.mask_id]
+        elif self.mask_id == 0:
+            heatmap = all_heatmaps
+        else:
+            print('ERROR! Heatmap image has only 2 dimensions and mask_id > 0')
+            return None
+
+        # Convert to float dtype if not already
+        if heatmap.dtype == np.uint8:
+            heatmap = heatmap.astype(np.float32)
+            heatmap /= 255
+
+        # Check heatmap sizes are matching
+        if heatmap.shape != img_size:
+            print("ERROR! Image size does not match heatmap on file")
+            return None
+
+        return heatmap
 
 
 class BBoxDetInst(DetectionInstance):
