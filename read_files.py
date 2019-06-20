@@ -107,6 +107,7 @@ class BoxLoader:
         self.n_imgs = n_imgs
         self.cov_mat = None
         self.label_threshold = float(label_threshold)
+        self.override_cov = override_cov
         if override_cov is not None and override_cov > 0:
             self.cov_mat = [[[override_cov, 0], [0, override_cov]], [[override_cov, 0], [0, override_cov]]]
 
@@ -118,6 +119,7 @@ class BoxLoader:
             dets_iter = islice(self.dict_dets, 0, self.n_imgs)
         else:
             dets_iter = iter(self.dict_dets)
+
         for img_id, img_dets in enumerate(dets_iter):
 
             yield [
@@ -129,7 +131,9 @@ class BoxLoader:
                     box=det['bbox'],
                     covs=det['covars'] if self.cov_mat is None else self.cov_mat
                 )
-                if self.cov_mat is not None or ('covars' in det and np.sum(det['covars'] != 0))
+                # TODO Check if there is neater way to do this conditional
+                if (self.cov_mat is not None or ('covars' in det and np.sum(det['covars'] != 0)))
+                and self.override_cov is not 0
 
                 # Otherwise create a standard bounding box
                 else

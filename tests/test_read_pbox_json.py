@@ -267,6 +267,31 @@ class TestReadPBoxJson(unittest.TestCase):
         self.assertTrue(np.allclose(img_dets[0].box, self.default_det_dict['bbox']))
         self.assertListEqual(list(img_dets[0].class_list), self.default_det_dict['label_probs'])
 
+    def test_single_bbox_set_covar_0_base_covar_non_zero(self):
+        # Create detection.json file
+        det_data = {}
+        det_data['classes'] = self.defaul_det_classes
+        det_data['img_names'] = self.default_img_names
+        self.default_det_dict.update({'covars': [self.default_covar, self.default_covar]})
+        det_data['detections'] = [[self.default_det_dict]]
+        det_file_name = os.path.join(self.det_files_root, 'det_file.json')
+        with open(det_file_name, 'w') as f:
+            json.dump(det_data, f)
+
+        detections = read_files.read_pbox_json(det_file_name, override_cov=0)
+
+        self.assertEqual(len(detections), 1)
+        self.assertIsInstance(detections, read_files.BoxLoader)
+
+        img_iterator = iter(detections)
+        img_dets = next(img_iterator)
+
+        self.assertEqual(len(img_dets), 1)
+        self.assertIsInstance(img_dets[0], BBoxDetInst)
+
+        self.assertTrue(np.allclose(img_dets[0].box, self.default_det_dict['bbox']))
+        self.assertListEqual(list(img_dets[0].class_list), self.default_det_dict['label_probs'])
+
     def test_single_pbox_set_covar(self):
         # Create detection.json file
         det_data = {}
