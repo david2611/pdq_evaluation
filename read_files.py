@@ -26,9 +26,16 @@ def read_pbox_json(filename, gt_class_ids=None, get_img_names=False, get_class_n
     the list of image names associated with the sequence shown by the .json file,
     and the list of class names which correspond to the label_probs for each detection.
     :param filename: filename where the desired json file is stored (.json included)
-    :param get_img_names: flag to determine if we expect this function to return the image names in order (default False)
-    :param get_class_names: flag to determine if we expect this function to return the class names in order (default False)
-    :param override_cov: Override the reported covariance while loading, use for calibration
+    :param gt_class_ids: Dictionary with class names as keys and class idxs as values. Used for ordering detections into
+    format of ground-truth (Default None which assumes order is already accurate)
+    :param get_img_names: flag to determine if we expect function to return the image names in order (default False)
+    :param get_class_names: flag to determine if we expect function to return the class names in order (default False)
+    :param n_imgs: allows choosing the number of images we want to read detections for (default None meaning all images)
+    :param override_cov: Override the reported covariance while loading, use for calibration.
+    If zero, BBox detections are used
+    :param label_threshold: label threshold for maximum non-background class for detection to be loaded
+    (default zero meaning all detections loaded)
+    :param mask_rcnn: flag determining if detections are of MaskRCNN format
     :return:
     detection_instances: list of list of detection instances for each image
     img_names: list of image names for each image (if flagged as desired by get_img_names)
@@ -40,35 +47,40 @@ def read_pbox_json(filename, gt_class_ids=None, get_img_names=False, get_class_n
     with open(filename, 'r') as f:
         data_dict = json.load(f)
 
-    # Associate detection classes to ground truth classes, to get the order right
+    # Associate detection classes to ground truth classes, to get the order right (for evaluation)
+    # format: class_association[det_idx] = gt_idx
     class_association = {}
     for det_idx, det_class in enumerate(data_dict['classes']):
-        # TODO Check this hack
+        # If no ground-truth classes available, assume order is already right
+        # Note this should mostly be used only for visualisation of raw detections
         if gt_class_ids is None:
             class_association[det_idx] = det_idx
         else:
+            # Find the gt_class in the gt_class_ids dictionary
             for gt_class in gt_class_ids.keys():
                 if are_classes_same(det_class, gt_class):
                     class_association[det_idx] = gt_class_ids[gt_class]
                     break
+
     det_ids = sorted(class_association.keys())
     gt_ids = [class_association[idx] for idx in det_ids]
+
+    # extract the maximum number of classes
     if gt_class_ids is None:
         num_classes = len(data_dict['classes'])
     else:
         num_classes = max(class_id for class_id in gt_class_ids.values()) + 1
 
     # create a detection instance for each detection described by dictionaries in dict_dets
-
     if mask_rcnn:
         det_instances = MaskRCNNLoader(data_dict['detections'], (gt_ids, det_ids, num_classes), filename, n_imgs, label_threshold)
-    elif override_cov == 0:
-        det_instances = BBoxLoader(data_dict['detections'], (gt_ids, det_ids, num_classes), n_imgs, label_threshold)
     else:
-        det_instances = PBoxLoader(data_dict['detections'], (gt_ids, det_ids, num_classes), n_imgs,
-                                   override_cov, label_threshold)
+        det_instances = BoxLoader(data_dict['detections'], (gt_ids, det_ids, num_classes), n_imgs,
+                                  override_cov, label_threshold)
     time_end = time.time()
     print("Total Time: {}".format(time_end-time_start))
+
+    # Return appropriate output
     if get_img_names:
         if get_class_names:
             return det_instances, data_dict['img_names'], data_dict['classes']
@@ -79,44 +91,7 @@ def read_pbox_json(filename, gt_class_ids=None, get_img_names=False, get_class_n
     return det_instances
 
 
-class BBoxLoader:
-
-    def __init__(self, dict_dets, class_assoc, n_imgs=None, label_threshold=0):
-        """
-        Initialiser for BBoxLoader object which reads in BBoxDetInst detections from dictionary detection information
-        :param dict_dets: dictionary of detection information
-        :param class_assoc: class association dictionary
-        :param n_imgs: number of images loading detections for out of all available for a sequence
-        :param label_threshold: label threshold to apply to detections when determining whether to keep them
-        """
-        self.dict_dets = dict_dets
-        self.class_assoc = class_assoc
-        self.n_imgs = n_imgs
-        self.label_threshold = float(label_threshold)
-
-    def __len__(self):
-        return len(self.dict_dets) if self.n_imgs is None else self.n_imgs
-
-    def __iter__(self):
-        if self.n_imgs is not None:
-            dets_iter = islice(self.dict_dets, start=0, stop=self.n_imgs)
-        else:
-            dets_iter = iter(self.dict_dets)
-        for img_id, img_dets in enumerate(dets_iter):
-            yield [
-                BBoxDetInst(
-                    class_list=reorder_classes(det['label_probs'], self.class_assoc),
-                    # Removed clamping boxes for detection output standardization for now.
-                    # box=clamp_bbox(det['bbox'], det['img_size'])
-                    box=det['bbox']
-                )
-                for det in img_dets
-                if self.label_threshold <= 0 or max(det['label_probs']) > self.label_threshold
-            ]
-
-
-# TODO Change to generic detection loader which handles BBox, PBox, ProbMask definitions
-class PBoxLoader:
+class BoxLoader:
 
     def __init__(self, dict_dets, class_assoc, n_imgs=None, override_cov=None, label_threshold=0):
         """
@@ -146,6 +121,7 @@ class PBoxLoader:
         for img_id, img_dets in enumerate(dets_iter):
 
             yield [
+                # If the detection has a reported covariance above zero, create a Probabilistic Box
                 PBoxDetInst(
                     class_list=reorder_classes(det['label_probs'], self.class_assoc),
                     # Removed clamping boxes for detection output standardization for now.
@@ -153,19 +129,19 @@ class PBoxLoader:
                     box=det['bbox'],
                     covs=det['covars'] if self.cov_mat is None else self.cov_mat
                 )
+                if self.cov_mat is not None or ('covars' in det and np.sum(det['covars'] != 0))
 
-                # TODO Check and confirm this new catch works as desired
-                # Catch any detections with zero covariance or no covariance given
-                # TODO double check if covars key check is necessary
-                if self.cov_mat is not None and ('covars' not in det or np.sum(det['covars']) == 0)
+                # Otherwise create a standard bounding box
                 else
-                # Create standard bounding boxes if that is the case
                 BBoxDetInst(
                     class_list=reorder_classes(det['label_probs'], self.class_assoc),
                     box=det['bbox']
                 )
                 for det in img_dets
-                # Ignore detections below given label threshold if provided
+
+                # Regardless of type, ignore detections below given label threshold if provided
+                # Note that this includes label_prob of background classes
+                # TODO should fix this so it does not include background
                 if self.label_threshold <= 0 or max(det['label_probs']) > self.label_threshold
             ]
 
@@ -302,16 +278,28 @@ class GTLoader:
                     box[3] += box[1]
                     bboxes.append(box)
 
-                    # TODO Check below is working as expected
                     # define GT segmentation mask
                     # If segmentation mask is expected to be pixels within bounding box, adjust accordingly
                     seg_mask = self.coco_obj.annToMask(annotation)
                     if self.bbox_gt:
                         eval_mask = np.zeros(seg_mask.shape, dtype=np.bool)
-                        # TODO update below to be smarter than this and just use box not seg_bbox
-                        # Note use seg_bbox for simplicity rather than trying to account for rounding in box
-                        seg_bbox = generate_bounding_box_from_mask(seg_mask)
+
+                        # Use the COCO bounding box (note not exact around segmentation masks)
+                        # Round down for lower bounds and round up for upper bounds to accommodate floats
+                        seg_bbox = np.floor(box).astype(np.int)
+                        seg_bbox[-2:] = np.ceil(box[-2:]).astype(np.int)
+
+                        # clamp box to image size to make sure not outside extremes
+                        seg_bbox = clamp_bbox(seg_bbox, eval_mask.shape)
+
+                        # Create segmentation mask with bounding box
                         eval_mask[seg_bbox[1]:seg_bbox[3]+1, seg_bbox[0]:seg_bbox[2]+1] = True
+
+                        # Below use seg_bbox for simplicity rather than trying to account for rounding in box
+                        # (USED IN REBUTTAL)
+                        # seg_bbox = generate_bounding_box_from_mask(seg_mask)
+                        # eval_mask[seg_bbox[1]:seg_bbox[3]+1, seg_bbox[0]:seg_bbox[2]+1] = True
+
                         seg_masks.append(eval_mask)
                     else:
                         seg_masks.append(seg_mask)
@@ -394,7 +382,7 @@ def are_classes_same(class_1, class_2):
     if class_1 == class_2:
         return True
     for synset in [
-        {'background', '__background__', '__bg__'},
+        {'background', '__background__', '__bg__', 'none'},
         {'motorcycle', 'motorbike'},
         {'aeroplane', 'airplane'},
         {'traffic light', 'trafficlight'},
