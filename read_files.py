@@ -133,7 +133,7 @@ class BoxLoader:
                 )
                 # TODO Check if there is neater way to do this conditional
                 if (self.cov_mat is not None or ('covars' in det and np.sum(det['covars'] != 0)))
-                and self.override_cov is not 0
+                and self.override_cov != 0
 
                 # Otherwise create a standard bounding box
                 else
