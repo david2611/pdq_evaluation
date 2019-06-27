@@ -33,7 +33,7 @@ def generate_coco_ground_truth_and_detections(param_sequence, use_heatmap=True):
     coco_img_ids = []
 
     # go through each image to create gt dict and det list of dicts
-    for img_idx, (img_gt_instances, img_det_instances, _1, _2) in enumerate(param_sequence):
+    for img_idx, (img_gt_instances, img_det_instances, _1, _2, _3) in enumerate(param_sequence):
 
         # Handle images with no gt instances
         if len(img_gt_instances) == 0:

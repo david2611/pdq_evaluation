@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from data_holders import BBoxDetInst, GroundTruthInstance
+from data_holders import BBoxDetInst, GroundTruthInstance, PBoxDetInst
 from pdq import PDQ
 _SMALL_VAL = 1e-14
 _MAX_LOSS = np.log(_SMALL_VAL)
@@ -13,6 +13,7 @@ class TestPDQ(unittest.TestCase):
         self.default_covar = [[1000, 0], [0, 1000]]
         self.default_filter_gt = False
         self.default_segment_mode = False
+        self.default_greedy_mode = False
 
         self.square_mask = np.zeros(self.img_size, dtype=np.bool)
         self.square_mask[750:1250, 750:1250] = True
@@ -30,14 +31,16 @@ class TestPDQ(unittest.TestCase):
     def test_perfect_bbox(self):
         detections = [BBoxDetInst(self.square_label_list, self.square_gt_box)]
         evaluator = PDQ()
-        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(score, 1, 4)
 
     def test_no_detection(self):
         detections = []
         evaluator = PDQ()
-        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertEqual(score, 0)
 
@@ -45,28 +48,32 @@ class TestPDQ(unittest.TestCase):
         detections = [BBoxDetInst(self.square_label_list, self.square_gt_box)]
         gts = []
         evaluator = PDQ()
-        score = evaluator.score([(gts, detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(gts, detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertEqual(score, 0)
 
     def test_half_label_confidence(self):
         detections = [BBoxDetInst([0.5, 0.5], self.square_gt_box)]
         evaluator = PDQ()
-        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(np.sqrt(0.5), score, 4)
 
     def test_half_position_confidence(self):
         detections = [BBoxDetInst(self.square_label_list, self.square_gt_box, 0.5)]
         evaluator = PDQ()
-        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(np.sqrt(0.5), score, 4)
 
     def test_half_position_and_label_confidences(self):
         detections = [BBoxDetInst([0.5, 0.5], self.square_gt_box, 0.5)]
         evaluator = PDQ()
-        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(0.5, score, 4)
 
@@ -75,7 +82,8 @@ class TestPDQ(unittest.TestCase):
         det_box[2] -= 1
         detections = [BBoxDetInst(self.square_label_list, det_box)]
         evaluator = PDQ()
-        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         expected_spatial_quality = np.exp((_MAX_LOSS*500)/(500*500))
 
@@ -88,7 +96,8 @@ class TestPDQ(unittest.TestCase):
         det_box[2] += 1
         detections = [BBoxDetInst(self.square_label_list, det_box)]
         evaluator = PDQ()
-        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         expected_spatial_quality = np.exp((_MAX_LOSS*500)/(500*500))
 
@@ -102,7 +111,8 @@ class TestPDQ(unittest.TestCase):
         det_box[0] += 1
         detections = [BBoxDetInst(self.square_label_list, det_box)]
         evaluator = PDQ()
-        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         expected_spatial_quality = np.exp((_MAX_LOSS*1000)/(500*500))
 
@@ -116,8 +126,10 @@ class TestPDQ(unittest.TestCase):
         one_detection = [BBoxDetInst(self.square_label_list, self.square_gt_box)]
 
         evaluator = PDQ()
-        score_two = evaluator.score([(self.square_gt, two_detections, self.default_filter_gt, self.default_segment_mode)])
-        score_one = evaluator.score([(self.square_gt, one_detection, self.default_filter_gt, self.default_segment_mode)])
+        score_two = evaluator.score([(self.square_gt, two_detections, self.default_filter_gt,
+                                      self.default_segment_mode, self.default_greedy_mode)])
+        score_one = evaluator.score([(self.square_gt, one_detection, self.default_filter_gt,
+                                      self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(score_two, 0.5)
         self.assertAlmostEqual(score_one, 1.0)
@@ -130,7 +142,8 @@ class TestPDQ(unittest.TestCase):
 
         detections = [BBoxDetInst(self.square_label_list, det_box)]
         evaluator = PDQ()
-        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(self.square_gt, detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         expected_spatial_quality = 0
 
@@ -141,7 +154,8 @@ class TestPDQ(unittest.TestCase):
     def test_multiple_detections(self):
         ten_detections = [BBoxDetInst(self.square_label_list, self.square_gt_box) for _ in range(10)]
         evaluator = PDQ()
-        score = evaluator.score([(self.square_gt, ten_detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(self.square_gt, ten_detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(score, 0.1)
 
@@ -155,7 +169,8 @@ class TestPDQ(unittest.TestCase):
             gts.append(GroundTruthInstance(new_gt_mask, 0))
         detections = [BBoxDetInst(self.square_label_list, self.square_gt_box)]
         evaluator = PDQ()
-        score = evaluator.score([(gts, detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(gts, detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(score, 0.1)
 
@@ -169,7 +184,7 @@ class TestPDQ(unittest.TestCase):
             gts.append(GroundTruthInstance(new_gt_mask, 0))
         detections = [BBoxDetInst(self.square_label_list, self.square_gt_box)]
         evaluator = PDQ()
-        score = evaluator.score([(gts, detections, True, self.default_segment_mode)])
+        score = evaluator.score([(gts, detections, True, self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(score, 1.0)
 
@@ -183,7 +198,7 @@ class TestPDQ(unittest.TestCase):
             gts.append(GroundTruthInstance(new_gt_mask, 0))
         detections = [BBoxDetInst(self.square_label_list, self.square_gt_box)]
         evaluator = PDQ()
-        score = evaluator.score([(gts, detections, False, self.default_segment_mode)])
+        score = evaluator.score([(gts, detections, False, self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(score, 0.1)
 
@@ -198,7 +213,8 @@ class TestPDQ(unittest.TestCase):
         detections = [BBoxDetInst(self.square_label_list, self.square_gt_box) for _ in range(10)]
 
         evaluator = PDQ()
-        score = evaluator.score([(gts, detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(gts, detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(score, 1/20.)
 
@@ -208,7 +224,8 @@ class TestPDQ(unittest.TestCase):
                       BBoxDetInst(self.square_label_list, self.square_gt_box)]
 
         evaluator = PDQ()
-        score = evaluator.score([(gts, detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(gts, detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(score, 0.5)
 
@@ -218,8 +235,10 @@ class TestPDQ(unittest.TestCase):
         dets1 = [BBoxDetInst(self.square_label_list, self.square_gt_box)]
         dets2 = []
         evaluator = PDQ()
-        score = evaluator.score([(gts1, dets1, self.default_filter_gt, self.default_segment_mode),
-                                 (gts2, dets2, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(gts1, dets1, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode),
+                                 (gts2, dets2, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(score, 0.5)
 
@@ -231,8 +250,8 @@ class TestPDQ(unittest.TestCase):
         dets1 = [BBoxDetInst(self.square_label_list, self.square_gt_box)]
         dets2 = []
         evaluator = PDQ()
-        score = evaluator.score([(gts1, dets1, True, self.default_segment_mode),
-                                 (gts2, dets2, True, self.default_segment_mode)])
+        score = evaluator.score([(gts1, dets1, True, self.default_segment_mode, self.default_greedy_mode),
+                                 (gts2, dets2, True, self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(score, 1.0)
 
@@ -245,8 +264,8 @@ class TestPDQ(unittest.TestCase):
         dets1 = [BBoxDetInst(self.square_label_list, self.square_gt_box)]
         dets2 = []
         evaluator = PDQ()
-        score = evaluator.score([(gts1, dets1, True, self.default_segment_mode),
-                                 (gts2, dets2, True, self.default_segment_mode)])
+        score = evaluator.score([(gts1, dets1, True, self.default_segment_mode, self.default_greedy_mode),
+                                 (gts2, dets2, True, self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(score, 0.5)
 
@@ -260,22 +279,23 @@ class TestPDQ(unittest.TestCase):
         dets1 = [BBoxDetInst(self.square_label_list, self.square_gt_box)]
         dets2 = [BBoxDetInst(self.square_label_list, self.square_gt_box)]
         evaluator = PDQ()
-        score = evaluator.score([(gts1, dets1, True, self.default_segment_mode),
-                                 (gts2, dets2, False, self.default_segment_mode)])
+        score = evaluator.score([(gts1, dets1, True, self.default_segment_mode, self.default_greedy_mode),
+                                 (gts2, dets2, False, self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(score, 2./3)
 
     def test_cross_gt_detected_by_perfect_box_in_non_segment_mode(self):
         detections = [BBoxDetInst(self.cross_label_list, self.cross_gt_box)]
         evaluator = PDQ()
-        score = evaluator.score([(self.cross_gt, detections, self.default_filter_gt, self.default_segment_mode)])
+        score = evaluator.score([(self.cross_gt, detections, self.default_filter_gt,
+                                  self.default_segment_mode, self.default_greedy_mode)])
 
         self.assertAlmostEqual(score, 1, 4)
 
     def test_cross_gt_detected_by_perfect_box_in_segment_mode(self):
         detections = [BBoxDetInst(self.cross_label_list, self.cross_gt_box)]
         evaluator = PDQ()
-        score = evaluator.score([(self.cross_gt, detections, self.default_filter_gt, True)])
+        score = evaluator.score([(self.cross_gt, detections, self.default_filter_gt, True, self.default_greedy_mode)])
 
         expected_num_missed_pixels = np.sum(np.logical_xor(self.square_mask, self.cross_mask))
         expected_spatial_quality = np.exp((_MAX_LOSS * expected_num_missed_pixels) / np.sum(self.cross_mask))
@@ -283,3 +303,60 @@ class TestPDQ(unittest.TestCase):
         expected_gmean = np.sqrt(expected_spatial_quality)
 
         self.assertAlmostEqual(score, expected_gmean, 4)
+
+    def test_hungarian_assignment(self):
+        gt_big_mask = self.square_mask.copy()
+        gt_small_mask = np.zeros(gt_big_mask.shape, dtype=gt_big_mask.dtype)
+        gt_small_mask[900:1101, 900:1101] = True
+
+        cov = [1]
+
+        gt_big = GroundTruthInstance(gt_big_mask, 0)
+        gt_small = GroundTruthInstance(gt_small_mask, 0)
+        gts = [gt_big, gt_small]
+        # Big Det
+        det1 = PBoxDetInst(self.square_label_list, [700, 700, 1300, 1300],
+                           [[[10000, 0], [0, 10000]], [[10000, 0], [0, 10000]]])
+        # Small Det
+        det2 = PBoxDetInst(self.square_label_list, [800, 800, 1200, 1200],
+                           [[[10000, 0], [0, 10000]], [[10000, 0], [0, 10000]]])
+
+        dets = [det1, det2]
+
+        evaluator = PDQ()
+        evaluator.score([(gts, dets, self.default_filter_gt, self.default_segment_mode, False)])
+        det_evals = evaluator._det_evals
+        for img_det_evals in det_evals:
+            for det_eval in img_det_evals:
+                # Assume that big detection should be matched to big gt and small to small
+                self.assertEqual(det_eval['det_id'], det_eval['gt_id'])
+
+    def test_greedy_assignment(self):
+        gt_big_mask = self.square_mask.copy()
+        gt_small_mask = np.zeros(gt_big_mask.shape, dtype=gt_big_mask.dtype)
+        gt_small_mask[900:1101, 900:1101] = True
+        # gt_big_mask[gt_small_mask] = False
+
+        cov = [1]
+
+        gt_big = GroundTruthInstance(gt_big_mask, 0)
+        gt_small = GroundTruthInstance(gt_small_mask, 0)
+        gts = [gt_big, gt_small]
+        # Big Det
+        det1 = PBoxDetInst(self.square_label_list, [700, 700, 1300, 1300],
+                           [[[10000, 0], [0, 10000]], [[10000, 0], [0, 10000]]])
+        # Small Det
+        det2 = PBoxDetInst(self.square_label_list, [800, 800, 1200, 1200],
+                           [[[10000, 0], [0, 10000]], [[10000, 0], [0, 10000]]])
+
+        dets = [det1, det2]
+
+        evaluator = PDQ()
+        evaluator.score([(gts, dets, self.default_filter_gt, self.default_segment_mode, True)])
+        det_evals = evaluator._det_evals
+        for img_det_evals in det_evals:
+            for det_eval in img_det_evals:
+                # Assume that big detection should be matched to small gt and small det to big gt
+                self.assertNotEqual(det_eval['det_id'], det_eval['gt_id'])
+
+

@@ -37,6 +37,8 @@ parser.add_argument('--segment_mode', action='store_true', help='This flag indic
                                                                 'in segment_mode meaning the background is any pixel'
                                                                 'outside the GT mask not the GT bounding box.'
                                                                 'Note, should only be used for mask_rcnn at present')
+parser.add_argument('--greedy_mode', action='store_true', help='This flag indicates if detection-GT assignment is done '
+                                                               'in a greedy fashion(assigned in order of highest pPDQ)')
 args = parser.parse_args()
 
 # Define these before using this code
@@ -47,7 +49,7 @@ elif args.test_set == 'rvc1':
 
 
 class ParamSequenceHolder:
-    def __init__(self, gt_instances_lists, det_instances_lists, filter_gt, segment_mode):
+    def __init__(self, gt_instances_lists, det_instances_lists, filter_gt, segment_mode, greedy_mode):
         """
         Class for holding parameters (GroundTruthInstances etc.) for multiple sequences.
         Based upon match_sequences function from codalab challenge but with fewer checks.
@@ -56,11 +58,15 @@ class ParamSequenceHolder:
         :param det_instances_lists: list of det_instance_lists (one det_instance_list per sequence)
         Note, order of gt_instances_list and det_instances_list must be the same (corresponding sequences)
         :param filter_gt: boolean describing if gt objects should be filtered by size (used for rvc1 only)
+        :param segment_mode: boolean describing if gt_objects will be evaluated using only their segmentation masks
+        i.e. not discounting pixels within GT bounding box that are part of the background.
+        :param greedy_mode: boolean describing if PDQ is assigning detections in a greedy fashion
         """
         self._gt_instances_lists = gt_instances_lists
         self._det_instances_lists = det_instances_lists
         self._filter_gt = filter_gt
         self._segment_mode = segment_mode
+        self._greedy_mode = greedy_mode
 
     def __len__(self):
         length = np.sum([len(gt_list) for gt_list in self._gt_instances_lists])
@@ -80,7 +86,7 @@ class ParamSequenceHolder:
             for frame_gt, frame_detections in zip(gt_list, det_list):
                 ground_truth = list(frame_gt)
                 detections = list(frame_detections)
-                yield ground_truth, detections, self._filter_gt, self._segment_mode
+                yield ground_truth, detections, self._filter_gt, self._segment_mode, self._greedy_mode
 
 
 def gen_param_sequence():
@@ -116,7 +122,8 @@ def gen_param_sequence():
     else:
         sys.exit("ERROR! Invalid test_set parameter (must be 'coco' or 'rvc1')")
 
-    param_sequence = ParamSequenceHolder(all_gt_instances, all_det_instances, filter_gt, args.segment_mode)
+    param_sequence = ParamSequenceHolder(all_gt_instances, all_det_instances, filter_gt, args.segment_mode,
+                                         args.greedy_mode)
     len_sequences = [len(all_gt_instances[idx]) for idx in range(len(all_gt_instances))]
 
     return param_sequence, len_sequences

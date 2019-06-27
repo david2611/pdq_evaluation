@@ -202,8 +202,8 @@ def _get_image_evals(parameters):
     'FP': <num_false_positives>, 'FN': <num_false_positives>, 'img_det_evals':<detection_evaluation_summary>,
     'img_gt_evals':<ground-truth_evaluation_summary>}
     """
-    gt_instances, det_instances, filter_gt, segment_mode = parameters
-    results = _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode)
+    gt_instances, det_instances, filter_gt, segment_mode, greedy_mode = parameters
+    results = _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_mode)
     return results
 
 
@@ -407,7 +407,7 @@ def _gen_cost_tables(gt_instances, det_instances, segment_mode):
             'fg': fg_cost_table, 'bg': bg_cost_table}
 
 
-def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode):
+def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_mode):
     """
     Calculates the sum of qualities for the best matches between ground truth objects and detections for an image.
     Each ground truth object can only be matched to a single detection and vice versa as an object-detection pair.
@@ -466,7 +466,10 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode):
 
     # Use the Hungarian algorithm with the cost table to find the best match between ground truth
     # object and detection (lowest overall cost representing highest overall pairwise quality)
-    row_idxs, col_idxs = linear_sum_assignment(cost_tables['overall'])
+    if greedy_mode:
+        row_idxs, col_idxs = _assign_greedy(cost_tables['overall'])
+    else:
+        row_idxs, col_idxs = linear_sum_assignment(cost_tables['overall'])
 
     # Transform the loss tables back into quality tables with values between 0 and 1
     overall_quality_table = 1 - cost_tables['overall']
@@ -561,3 +564,37 @@ def _is_gt_included(gt_instance, filter_gt):
     return (gt_instance.bounding_box[2] - gt_instance.bounding_box[0] > 10) and \
            (gt_instance.bounding_box[3] - gt_instance.bounding_box[1] > 10) and \
            np.count_nonzero(gt_instance.segmentation_mask) > 100
+
+
+def _assign_greedy(cost_mat):
+    """
+    Assign detections to ground truths in a greedy fashion (highest pPDQ scores assigned)
+    :param cost_mat: Costs matrix (ground-truths x detections) square matrix with zeros padding
+    :return: row_idxs, col_idxs for assignments
+    """
+    if cost_mat.shape[0] != cost_mat.shape[1]:
+        print("ERROR! Cost matrix must be square")
+        return [], []
+    # TODO decide if better to flatten in column order to preference detections on a tie
+    match_order = np.argsort(cost_mat.flatten())
+    rows = []   # gts
+    cols = []   # dets
+    n_assign = cost_mat.shape[0]
+    for match_idx in match_order:
+        row_idx = match_idx // n_assign
+        col_idx = match_idx % n_assign
+
+        if row_idx not in rows and col_idx not in cols:
+            rows.append(row_idx)
+            cols.append(col_idx)
+            # Break out of the loop if all assignments have been made
+            if len(rows) == n_assign:
+                break
+
+    if len(rows) != n_assign or len(cols) != n_assign:
+        print("ERROR! This should not happen")
+        return [], []
+
+    return rows, cols
+
+
