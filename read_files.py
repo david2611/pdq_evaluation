@@ -5,7 +5,7 @@ System path must be appended to include location of PythonAPI.
 """
 
 import numpy as np
-from data_holders import GroundTruthInstance, PBoxDetInst, BBoxDetInst, MaskRCNNDetInst
+from data_holders import GroundTruthInstance, PBoxDetInst, BBoxDetInst, ProbSegDetInst
 import json
 import time
 from itertools import islice
@@ -19,7 +19,7 @@ from pycocotools.coco import COCO
 
 
 def read_pbox_json(filename, gt_class_ids=None, get_img_names=False, get_class_names=False, n_imgs=None,
-                   override_cov=None, label_threshold=0, mask_rcnn=False):
+                   override_cov=None, label_threshold=0, prob_seg=False):
     """
     The following function reads a json file design to describe detections which can be expressed as
     probabilistic bounding boxes and return a list of list of detection instances for each image,
@@ -35,11 +35,12 @@ def read_pbox_json(filename, gt_class_ids=None, get_img_names=False, get_class_n
     If zero, BBox detections are used
     :param label_threshold: label threshold for maximum non-background class for detection to be loaded
     (default zero meaning all detections loaded)
-    :param mask_rcnn: flag determining if detections are of MaskRCNN format
+    :param prob_seg: flag determining if detections are of probabilistic segmentation format
     :return:
     detection_instances: list of list of detection instances for each image
     img_names: list of image names for each image (if flagged as desired by get_img_names)
-    class_names: list of class names for each class expressed within label_probs of each detection (if flagged as desired by get_class_names)
+    class_names: list of class names for each class expressed within label_probs of each detection
+    (if flagged as desired by get_class_names)
     """
     time_start = time.time()
 
@@ -72,8 +73,8 @@ def read_pbox_json(filename, gt_class_ids=None, get_img_names=False, get_class_n
         num_classes = max(class_id for class_id in gt_class_ids.values()) + 1
 
     # create a detection instance for each detection described by dictionaries in dict_dets
-    if mask_rcnn:
-        det_instances = MaskRCNNLoader(data_dict['detections'], (gt_ids, det_ids, num_classes), filename, n_imgs, label_threshold)
+    if prob_seg:
+        det_instances = ProbSegmentLoader(data_dict['detections'], (gt_ids, det_ids, num_classes), filename, n_imgs, label_threshold)
     else:
         det_instances = BoxLoader(data_dict['detections'], (gt_ids, det_ids, num_classes), n_imgs,
                                   override_cov, label_threshold)
@@ -131,8 +132,7 @@ class BoxLoader:
                     box=det['bbox'],
                     covs=det['covars'] if self.cov_mat is None else self.cov_mat
                 )
-                # TODO Check if there is neater way to do this conditional
-                if (self.cov_mat is not None or ('covars' in det and np.sum(det['covars'] != 0)))
+                if (self.cov_mat is not None or ('covars' in det and (np.sum(det['covars']) != 0)))
                 and self.override_cov != 0
 
                 # Otherwise create a standard bounding box
@@ -145,12 +145,11 @@ class BoxLoader:
 
                 # Regardless of type, ignore detections below given label threshold if provided
                 # Note that this includes label_prob of background classes
-                # TODO should fix this so it does not include background
                 if self.label_threshold <= 0 or max(det['label_probs']) > self.label_threshold
             ]
 
 
-class MaskRCNNLoader:
+class ProbSegmentLoader:
     def __init__(self, dict_dets, class_assoc, det_filename, n_imgs=None, label_threshold=0):
         """
         Initialiser for MaskRCNNLoader object which reads in MaskRCNNDetInst detections from dictionary detection
@@ -177,17 +176,18 @@ class MaskRCNNLoader:
             dets_iter = iter(self.dict_dets)
         for img_id, img_dets in enumerate(dets_iter):
             yield [
-                MaskRCNNDetInst(
+                ProbSegDetInst(
                     class_list=reorder_classes(det['label_probs'], self.class_assoc),
                     chosen_label=det['label'],
                     mask_id=det['mask_id'],
-                    detection_file=det['mask'],
+                    detection_file=det['masks_file'],
                     # Only provide a mask root if path given is not absolute
-                    mask_root='' if osp.isabs(det['mask']) else osp.dirname(osp.abspath(self.det_filename)),
+                    mask_root='' if osp.isabs(det['masks_file']) else osp.dirname(osp.abspath(self.det_filename)),
                     box=det['bbox']
                 )
                 for det in img_dets
-                # TODO decide if label_threshold should be applied to label_probs or the chosen label
+                # Regardless of type, ignore detections below given label threshold if provided
+                # Note that this includes label_prob of background classes
                 if self.label_threshold <= 0 or max(det['label_probs']) > self.label_threshold
             ]
 
@@ -199,6 +199,8 @@ def read_COCO_gt(filename, n_imgs=None, ret_img_sizes=False, ret_classes=False, 
     :param n_imgs: number of images ground-truth is being extracted from. If None extract all (default None)
     :param ret_img_sizes: Boolean flag dictating if the image sizes should be returned
     :param ret_classes: Boolean flag dictating if the class mapping dictionary should be returned
+    :param bbox_gt: Boolean flag dictating if the GroundTruthInstance should ignore the segmentation mask and only use
+    bounding box information.
     :return: ground-truth instances as GTLoader and optionally image sizes or class mapping dictionary if requested
     """
 
@@ -271,7 +273,8 @@ class GTLoader:
                 class_ids = [annotation['category_id'] for annotation in img_annotations]
                 bboxes = []
                 seg_masks = []
-                ignores = [annotation['ignore'] if 'ignore' in annotation.keys() else False for annotation in img_annotations ]
+                ignores = [annotation['ignore'] if 'ignore' in annotation.keys() else False
+                           for annotation in img_annotations]
                 iscrowds = [annotation['iscrowd'] for annotation in img_annotations]
                 areas = [annotation['area'] for annotation in img_annotations]
 

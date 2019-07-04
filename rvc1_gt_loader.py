@@ -16,6 +16,7 @@ import cv2
 import data_holders
 import rvc1_class_list
 import numpy as np
+import utils
 
 
 
@@ -150,10 +151,16 @@ class ImageGTLoader:
                     class_id = rvc1_class_list.get_class_id(detection_data['class'])
                     if class_id is not None:
                         mask_id = int(detection_data['mask_id'])
-                        bbox = [int(v) for v in detection_data.get('bounding_box', [])]
+
+                        # Add bounding box data if available and if not create bounding box from mask
+                        if 'bounding_box' in detection_data:
+                            bbox = [int(v) for v in detection_data['bounding_box']]
+                        else:
+                            bbox = utils.generate_bounding_box_from_mask(self._masks == mask_id)
+
+                        # Define ground-truth segmentation mask using original mask or generating bbox mask if necessary
                         if self._bbox_gt:
-                            # TODO check _masks.shape and just use it if possible
-                            seg_mask = np.zeros((self._masks.shape[0], self._masks.shape[1]), dtype=np.bool)
+                            seg_mask = np.zeros(self._masks.shape, dtype=np.bool)
                             seg_mask[bbox[1]:bbox[3]+1, bbox[0]:bbox[2]+1] = True
                         else:
                             seg_mask = (self._masks == mask_id)

@@ -25,12 +25,20 @@ class PDQ(object):
     Extension of the code used in the 1st robotic vision challenge (RVC1) code.
     Link to RVC1 PDQ code: https://github.com/jskinn/rvchallenge-evaluation/blob/master/pdq.py
     """
-    # TODO update so the decision to ignore small GTs and use segment mode is a parameter of the object and not a lsit of the same parameter in score
-    def __init__(self):
+    def __init__(self, filter_gts=False, segment_mode=False, greedy_mode=False):
         """
         Initialisation function for PDQ evaluator.
+        :param filter_gts: boolean describing if output should be filtered by ground-truth size (used for rvc1 only)
+        (default False)
+        :param segment_mode: boolean describing if gt_objects will be evaluated using only their segmentation masks
+        i.e. not discounting pixels within GT bounding box that are part of the background. (default False)
+        :param greedy_mode: Boolean flag for if PDQ should utilise greedy assignment strategy rather than optimal.
+        Can lead to sped-up evaluation time but differs from official utilisation of PDQ. (default False)
         """
         super(PDQ, self).__init__()
+        self.greedy_mode = greedy_mode
+        self.segment_mode = segment_mode
+        self.filter_gts = filter_gts
         self._tot_overall_quality = 0.0
         self._tot_spatial_quality = 0.0
         self._tot_label_quality = 0.0
@@ -92,10 +100,8 @@ class PDQ(object):
         The average is calculated as the average pairwise quality over the number of object-detection pairs observed.
         Note that this removes any evaluation information that had been stored for previous images.
         Assumes you want to score just the full list you are given.
-        :param pdq_param_lists: A list of tuples where each tuple holds a list of GroundTruthInstances,
-        DetectionInstances, and booleans respectively, describing the ground truth objects, detections, and desire for
-        gt_objects to to be filtered respectively for a given image.
-        Each image observed is an entry in the main list.
+        :param pdq_param_lists: A list of tuples where each tuple holds a list of GroundTruthInstances and a list of
+        DetectionInstances. Each image observed is an entry in the main list.
         :return: The average PDQ across all images as a float.
         """
         self.reset()
@@ -103,7 +109,7 @@ class PDQ(object):
         pool = Pool(processes=6)
 
         num_imgs = len(pdq_param_lists)
-        for img_results in tqdm(pool.imap(_get_image_evals, pdq_param_lists),
+        for img_results in tqdm(pool.imap(self._get_image_evals, pdq_param_lists),
                                 total=num_imgs, desc='PDQ Images'):
             self._tot_overall_quality += img_results['overall']
             self._tot_spatial_quality += img_results['spatial']
@@ -186,25 +192,23 @@ class PDQ(object):
         """
         return self._tot_TP, self._tot_FP, self._tot_FN
 
-
-def _get_image_evals(parameters):
-    """
-    Evaluate the results for a given image
-    :param parameters: tuple containing list of GroundTruthInstances, DetectionInstances,
-     filter_gt boolean flag and segment_mode boolean flag for the given image respectively
-    :return: results dictionary containing total overall spatial quality, total spatial quality on positively assigned
-    detections, total label quality on positively assigned detections, total foreground spatial quality on positively
-    assigned detections, total background spatial quality on positively assigned detections, number of true positives,
-    number of false positives, number false negatives, detection evaluation summary, and ground-truth evaluation summary
-    for the given image.
-    Format {'overall':<tot_overall_quality>, 'spatial': <tot_tp_spatial_quality>, 'label': <tot_tp_label_quality>,
-    'fg':<tot_tp_foreground_quality>, 'bg':<tot_tp_background_quality>, 'TP': <num_true_positives>,
-    'FP': <num_false_positives>, 'FN': <num_false_positives>, 'img_det_evals':<detection_evaluation_summary>,
-    'img_gt_evals':<ground-truth_evaluation_summary>}
-    """
-    gt_instances, det_instances, filter_gt, segment_mode, greedy_mode = parameters
-    results = _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_mode)
-    return results
+    def _get_image_evals(self, parameters):
+        """
+        Evaluate the results for a given image
+        :param parameters: tuple containing list of GroundTruthInstances and DetectionInstances
+        :return: results dictionary containing total overall spatial quality, total spatial quality on positively assigned
+        detections, total label quality on positively assigned detections, total foreground spatial quality on positively
+        assigned detections, total background spatial quality on positively assigned detections, number of true positives,
+        number of false positives, number false negatives, detection evaluation summary, and ground-truth evaluation summary
+        for the given image.
+        Format {'overall':<tot_overall_quality>, 'spatial': <tot_tp_spatial_quality>, 'label': <tot_tp_label_quality>,
+        'fg':<tot_tp_foreground_quality>, 'bg':<tot_tp_background_quality>, 'TP': <num_true_positives>,
+        'FP': <num_false_positives>, 'FN': <num_false_positives>, 'img_det_evals':<detection_evaluation_summary>,
+        'img_gt_evals':<ground-truth_evaluation_summary>}
+        """
+        gt_instances, det_instances = parameters
+        results = _calc_qual_img(gt_instances, det_instances, self.filter_gts, self.segment_mode, self.greedy_mode)
+        return results
 
 
 def _vectorize_img_gts(gt_instances, img_shape, segment_mode):
@@ -575,7 +579,6 @@ def _assign_greedy(cost_mat):
     if cost_mat.shape[0] != cost_mat.shape[1]:
         print("ERROR! Cost matrix must be square")
         return [], []
-    # TODO decide if better to flatten in column order to preference detections on a tie
     match_order = np.argsort(cost_mat.flatten())
     rows = []   # gts
     cols = []   # dets

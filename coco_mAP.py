@@ -12,10 +12,18 @@ sys.path.append('/media/david/storage_device/postdoc_2018-2020/projects/rvc_new_
 from pycocotools.cocoeval import COCOeval
 from pycocotools.coco import COCO
 
-_HEATMAP_THRESH = 0.00135
-_BLANK_IMG_SHAPE = [100, 100]
 
 def coco_mAP(param_sequence, use_heatmap=True):
+    """
+    Calculate COCO mean average precision (mAP) scores using official COCO evaluation code
+    :param param_sequence: A list of tuples where each tuple holds a list of GroundTruthInstances and a list of
+    DetectionInstances to use for evaluation. Each image observed is an entry in the main list.
+    :param use_heatmap: Boolean flag describing if BBox used for evaluation should be based upon heatmap of detection
+    (i.e. fit a bounding box around heatmap segmentation mask). (Default True)
+    :param full: Boolean describing if full moLRP outputs are returned (moLRP, moLRPLoc, moLRPFP, moLRPFN).
+    If true these are returned in a dictionary, if not only moLRP is returned as a float. (Default False)
+    :return: mean average precision (mAP) score for the sequence.
+    """
     # Create ground truth COCO object
     coco_gt = COCO()
 
@@ -43,7 +51,6 @@ def coco_mAP(param_sequence, use_heatmap=True):
 
     # Print COCO evaluation statistics
     coco_eval.summarize()
-
 
     # Check that there are precisions here, if not return zero
     if len(precisions[precisions > -1]) == 0:

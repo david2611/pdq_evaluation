@@ -16,7 +16,7 @@ import data_holders
 import rvc1_class_list
 
 
-def read_submission(directory, expected_sequence_names):
+def read_submission(directory, expected_sequence_names, override_cov=None):
     """
     Read all the submissions for all the sequences outlined in the given folder.
     Each sequence's detections are provided in a file ending with 'detections.json'.
@@ -35,6 +35,7 @@ def read_submission(directory, expected_sequence_names):
 
     :param directory: location of each sequence's submission json file.
     :param expected_sequence_names: The list of sequence names we're looking for submissions for.
+    :param override_cov: Float to set corner covariance matrices to spherical Gaussians with given variance
     :return: generator of generator of DetectionInstances for each image
     """
     sequence_names = []
@@ -51,13 +52,21 @@ def read_submission(directory, expected_sequence_names):
                 else:
                     sequence_names.append(os.path.join(root, json_file))
 
-    return [DetSequenceLoader(sequence_name)
+    return [DetSequenceLoader(sequence_name, override_cov=override_cov)
             for sequence_name in sequence_names]
 
 
 class DetSequenceLoader:
-    def __init__(self, sequence_json):
+    def __init__(self, sequence_json, override_cov=None):
+        """
+        Sequence loader for all detections of a given sequence
+        :param sequence_json: string : .json file describing sequence
+        :param override_cov: Float to set corner covariance matrices to spherical Gaussians with given variance
+        WARNING! This should only be true when visualising detections without GT analysis
+        """
+
         self._sequence_json = sequence_json
+        self._override_cov = override_cov
         with open(sequence_json, 'r') as f:
             self._data_dict = json.load(f)
 
@@ -107,16 +116,18 @@ class DetSequenceLoader:
         for img_idx, img_dets in enumerate(dict_dets):
             yield DetImgPBoxLoader(img_dets, (our_class_ids, sub_class_ids),
                                    num_classes=len(self._data_dict['classes']), img_idx=img_idx,
-                                   sequence_name=sequence_name)
+                                   sequence_name=sequence_name, override_cov=self._override_cov)
 
 
 class DetImgPBoxLoader:
-    def __init__(self, img_dets, class_mapping, num_classes=len(rvc1_class_list.CLASSES), img_idx=-1, sequence_name='unknown'):
+    def __init__(self, img_dets, class_mapping, num_classes=len(rvc1_class_list.CLASSES), img_idx=-1,
+                 sequence_name='unknown', override_cov=None):
         self._img_dets = img_dets
         self._class_mapping = class_mapping
         self._num_classes = num_classes
         self._img_idx = img_idx
         self._sequence_name = sequence_name
+        self._override_cov = override_cov
 
     def __len__(self):
         return len(self._img_dets)
@@ -170,13 +181,17 @@ class DetImgPBoxLoader:
                 # Normalize the label probability
                 if total_prob > 1:
                     label_probs /= total_prob
-                if 'covars' not in det or det['covars'] == [[[0, 0], [0, 0]], [[0, 0], [0, 0]]]:
+                if 'covars' not in det or det['covars'] == [[[0, 0], [0, 0]], [[0, 0], [0, 0]]] or self._override_cov == 0:
                     yield data_holders.BBoxDetInst(
                         class_list=label_probs,
                         box=det['bbox']
                     )
                 else:
-                    covars = np.array(det['covars'])
+                    if self._override_cov is not None:
+                        covars = np.array([[[self._override_cov, 0], [0, self._override_cov]],
+                                           [[self._override_cov, 0], [0, self._override_cov]]])
+                    else:
+                        covars = np.array(det['covars'])
                     if covars.shape != (2, 2, 2):
                         raise ValueError(make_error_msg("Key 'covars' must contain 2 2x2 matrices",
                                                         self._sequence_name, self._img_idx, det_idx))

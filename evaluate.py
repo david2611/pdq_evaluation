@@ -31,12 +31,12 @@ parser.add_argument('--mAP_heatmap', action='store_true', help='flag for dictati
                                                                'locations (not used in papers and not recommended)')
 parser.add_argument('--bbox_gt', action='store_true', help='Flag determines if you want to treat GT as bounding boxes'
                                                            'rather than segmentation masks.')
-parser.add_argument('--mask_rcnn', action='store_true', help='this flag indicates that the detections are from MaskRCNN'
-                                                             'and are formatted as such')
+parser.add_argument('--prob_seg', action='store_true', help='this flag indicates that the detections are probabilistic'
+                                                            'segmentations and are formatted as such')
 parser.add_argument('--segment_mode', action='store_true', help='This flag indicates that the PDQ should be evaluated'
                                                                 'in segment_mode meaning the background is any pixel'
                                                                 'outside the GT mask not the GT bounding box.'
-                                                                'Note, should only be used for mask_rcnn at present')
+                                                                'Note, should only be used for prob_seg at present')
 parser.add_argument('--greedy_mode', action='store_true', help='This flag indicates if detection-GT assignment is done '
                                                                'in a greedy fashion(assigned in order of highest pPDQ)')
 args = parser.parse_args()
@@ -49,7 +49,7 @@ elif args.test_set == 'rvc1':
 
 
 class ParamSequenceHolder:
-    def __init__(self, gt_instances_lists, det_instances_lists, filter_gt, segment_mode, greedy_mode):
+    def __init__(self, gt_instances_lists, det_instances_lists):
         """
         Class for holding parameters (GroundTruthInstances etc.) for multiple sequences.
         Based upon match_sequences function from codalab challenge but with fewer checks.
@@ -57,16 +57,10 @@ class ParamSequenceHolder:
         :param gt_instances_lists: list of gt_instance_lists (one gt_instance_list per sequence)
         :param det_instances_lists: list of det_instance_lists (one det_instance_list per sequence)
         Note, order of gt_instances_list and det_instances_list must be the same (corresponding sequences)
-        :param filter_gt: boolean describing if gt objects should be filtered by size (used for rvc1 only)
-        :param segment_mode: boolean describing if gt_objects will be evaluated using only their segmentation masks
-        i.e. not discounting pixels within GT bounding box that are part of the background.
-        :param greedy_mode: boolean describing if PDQ is assigning detections in a greedy fashion
+
         """
         self._gt_instances_lists = gt_instances_lists
         self._det_instances_lists = det_instances_lists
-        self._filter_gt = filter_gt
-        self._segment_mode = segment_mode
-        self._greedy_mode = greedy_mode
 
     def __len__(self):
         length = np.sum([len(gt_list) for gt_list in self._gt_instances_lists])
@@ -86,7 +80,7 @@ class ParamSequenceHolder:
             for frame_gt, frame_detections in zip(gt_list, det_list):
                 ground_truth = list(frame_gt)
                 detections = list(frame_detections)
-                yield ground_truth, detections, self._filter_gt, self._segment_mode, self._greedy_mode
+                yield ground_truth, detections
 
 
 def gen_param_sequence():
@@ -105,25 +99,23 @@ def gen_param_sequence():
         gt_instances, gt_class_ids = read_files.read_COCO_gt(coco_gt_file, ret_classes=True, bbox_gt=args.bbox_gt)
         det_filename = args.det_loc
 
-        # output is a generator of lists of DetectionInstance objects (BBox or PBox depending)
+        # output is a generator of lists of DetectionInstance objects (BBox or PBox depending on detection)
         det_instances = read_files.read_pbox_json(det_filename, gt_class_ids, override_cov=args.set_cov,
-                                                  mask_rcnn=args.mask_rcnn)
+                                                  prob_seg=args.prob_seg)
         all_gt_instances = [gt_instances]
         all_det_instances = [det_instances]
-        filter_gt = False
 
     elif args.test_set == 'rvc1':
         # output is a list of generator of generators of GTInstance objects
         all_gt_instances = rvc1_gt_loader.read_ground_truth(rvc1_gt_folder, bbox_gt=args.bbox_gt)
         all_det_instances = rvc1_submission_loader.read_submission(args.det_loc,
-                                                                   ["{0:06d}".format(idx) for idx in range(_NUM_VALID)])
-        filter_gt = True
+                                                                   ["{0:06d}".format(idx) for idx in range(_NUM_VALID)],
+                                                                   override_cov=args.set_cov)
 
     else:
         sys.exit("ERROR! Invalid test_set parameter (must be 'coco' or 'rvc1')")
 
-    param_sequence = ParamSequenceHolder(all_gt_instances, all_det_instances, filter_gt, args.segment_mode,
-                                         args.greedy_mode)
+    param_sequence = ParamSequenceHolder(all_gt_instances, all_det_instances)
     len_sequences = [len(all_gt_instances[idx]) for idx in range(len(all_gt_instances))]
 
     return param_sequence, len_sequences
@@ -139,7 +131,7 @@ def main():
     print("Calculating PDQ")
 
     # Get summary statistics (PDQ, avg_qualities)
-    evaluator = PDQ()
+    evaluator = PDQ(filter_gts=(args.test_set == 'rvc1'), segment_mode=args.segment_mode, greedy_mode=args.greedy_mode)
     pdq = evaluator.score(param_sequence)
     TP, FP, FN = evaluator.get_assignment_counts()
     avg_spatial_quality = evaluator.get_avg_spatial_score()

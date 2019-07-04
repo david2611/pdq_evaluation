@@ -198,6 +198,9 @@ def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_anal
             # Detections without full statistics state their max non-none class and confidence thereof
             max_class = class_list[np.argmax(det_inst.class_list)]
             max_score = np.amax(det_inst.class_list)
+            # Note that max_class 'none' only occurs for rvc1.
+            # Reading pbox json files filters out 'none' predictions in coco format as coco has no 'none' class
+            # so this never happens
             if max_class == 'none':
                 max_class = class_list[np.argsort(det_inst.class_list)[-2]]
                 max_score = det_inst.class_list[np.argsort(det_inst.class_list)[-2]]

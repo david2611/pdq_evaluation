@@ -1,5 +1,5 @@
 import utils
-from data_holders import PBoxDetInst, BBoxDetInst, MaskRCNNDetInst
+from data_holders import PBoxDetInst, BBoxDetInst, ProbSegDetInst
 
 _HEATMAP_THRESH = 0.00135
 _BLANK_IMG_SHAPE = [100, 100]
@@ -9,8 +9,8 @@ def generate_coco_ground_truth_and_detections(param_sequence, use_heatmap=True):
     Function for creating ground-truth dictionary and detections list in COCO format from parameter sequence of
     GroundTruthInstances and DetectionInstances.
     Note currently assumes classIDs and imageIDs start at 0
-    :param param_sequence: ParamSequenceHolder containing all GroundTruthInstances, DetectionInstances,
-    and ground-truth filter flags across all sequences being evaluated.
+    :param param_sequence: ParamSequenceHolder containing all GroundTruthInstances and DetectionInstances
+    across all sequences being evaluated.
     :param use_heatmap: Boolean dictating that BBoxes should be calculated using outskirts of heatmap rather than the
     box corner locations of PBoxDetInst or BBoxDetInst objects'
     :return:(coco_gt_dict, coco_det_list).
@@ -33,7 +33,7 @@ def generate_coco_ground_truth_and_detections(param_sequence, use_heatmap=True):
     coco_img_ids = []
 
     # go through each image to create gt dict and det list of dicts
-    for img_idx, (img_gt_instances, img_det_instances, _1, _2, _3) in enumerate(param_sequence):
+    for img_idx, (img_gt_instances, img_det_instances) in enumerate(param_sequence):
 
         # Handle images with no gt instances
         if len(img_gt_instances) == 0:
@@ -81,7 +81,7 @@ def generate_coco_ground_truth_and_detections(param_sequence, use_heatmap=True):
 
         # Create coco detections for each detection in this image
         for det_idx, det_instance in enumerate(img_det_instances):
-            if isinstance(det_instance, MaskRCNNDetInst):
+            if isinstance(det_instance, ProbSegDetInst):
                 coco_det_class = det_instance.chosen_label
             else:
                 coco_det_class = int(det_instance.get_max_class() + 1)
@@ -93,7 +93,7 @@ def generate_coco_ground_truth_and_detections(param_sequence, use_heatmap=True):
                 coco_det_box = utils.generate_bounding_box_from_mask(
                     det_instance.calc_heatmap(img_gt_instances[0].segmentation_mask.shape) > _HEATMAP_THRESH)
             else:
-                if isinstance(det_instance, (PBoxDetInst, BBoxDetInst, MaskRCNNDetInst)):
+                if isinstance(det_instance, (PBoxDetInst, BBoxDetInst, ProbSegDetInst)):
                     coco_det_box = [float(boxval) for boxval in det_instance.box]
                 else:
                     raise ValueError("Cannot create bbox for detection! Not using heatmap, PBoxDetInst, or BBoxDetInst")

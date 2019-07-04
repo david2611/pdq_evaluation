@@ -47,6 +47,10 @@ class GroundTruthInstance(object):
         else:
             self.num_pixels = np.count_nonzero(segmentation_mask)
 
+        # ensure that a coco area is provided if not explicitly
+        if self.coco_area is None:
+            self.coco_area = self.num_pixels
+
 
 class DetectionInstance(object):
     def __init__(self, class_list, heatmap=None):
@@ -84,25 +88,41 @@ class DetectionInstance(object):
         return np.amax(self.class_list)
 
 
-class MaskRCNNDetInst(DetectionInstance):
-    def __init__(self, class_list, detection_file, chosen_label, mask_id, box, mask_root=''):
+class ProbSegDetInst(DetectionInstance):
+    def __init__(self, class_list, detection_file, mask_id, mask_root='', chosen_label=None, box=None):
         """
         Initialisation function for detection instance where full instance heatmap is available on file
         :param class_list: list of label probabilities for each class, ordered to match the class labelling convention
         of corresponding ground-truth data.
-        :param detection_file: location of the .npy file containing the instance's heatmap
+        :param detection_file: location of the .npy file containing the heatmap masks for all detections within an image
+        :param mask_id: the id of the mask within the detection file that corresponds with this instance
         :param mask_root: root location for all mask files (defaults to current directory)
+        :param chosen_label: the chosen label for the detection (optional). If None will be the maximum label in class
+        list. Note this is only used for mAP and moLRP, PDQ uses class_list.
+        :param box: bounding box to be used for box-style detection analysis like mAP and moLRP (optional).
+        If None box will be made based on provided probabilistic segmentation heatmap (probability > _HEATMAP_THRESH).
         """
-        super(MaskRCNNDetInst, self).__init__(class_list)
+        super(ProbSegDetInst, self).__init__(class_list)
         self.detection_file = detection_file
-        self.chosen_label = chosen_label
         self.mask_id = mask_id
         self.mask_root = mask_root
+        if chosen_label is None:
+            self.chosen_label = np.argmax(self.class_list)
+        else:
+            self.chosen_label = chosen_label
+
+        if box is None:
+            self.box = utils.generate_bounding_box_from_mask(self.calc_heatmap() > _HEATMAP_THRESH)
         self.box = box
 
-    def calc_heatmap(self, img_size):
+    def calc_heatmap(self, img_size=None):
         """
-        :param img_size: size of the image expected from the heatmap output.
+        Create heatmap from stored file. Assumes .npy file stores all heatmaps in numpy array m x h x w.
+        Where m is number of heatmap masks, h is image height, and w is image width.
+        Numpy array is assumed to be float32 format with values between 0 and 1 or uint8 format with values between
+        0 and 255.
+        :param img_size: size of the image expected from the heatmap output. Default here is None as image size should
+        come from the loaded file. If img_size is provided, it is used to check heatmap output matches what is expected.
         :return: spatial probability heatmap of the size <img_size>
         """
         all_heatmaps = np.load(osp.join(self.mask_root, self.detection_file))
@@ -120,10 +140,11 @@ class MaskRCNNDetInst(DetectionInstance):
             heatmap = heatmap.astype(np.float32)
             heatmap /= 255
 
-        # Check heatmap sizes are matching
-        if heatmap.shape != img_size:
-            print("ERROR! Image size does not match heatmap on file")
-            return None
+        if img_size is not None:
+            # Check heatmap sizes are matching
+            if heatmap.shape != img_size:
+                print("ERROR! Image size does not match heatmap on file")
+                return None
 
         return heatmap
 
