@@ -243,7 +243,7 @@ visualise_prob_detections.py
  
  - `<save_folder_location>` a string defining the folder where image visualisations will be saved. Must be different to the `<gt_imgs_location>`
  
- - `<cov>` is an optional value defining set covariance for the corners of the detections. **This must match the set covariance used in evaluate.py**
+ - `<cov>` is an optional value defining set covariance for the corners of the detections.
  
  - `<img_type>` is a string defining what image type the ground-truth is provided in. For example 'jpg'.
  
