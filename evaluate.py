@@ -13,7 +13,7 @@ from coco_LRP import coco_LRP
 _NUM_VALID = 4
 
 # Input parameters
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(description='Perform PDQ, mAP, and moLRP evaluation on either coco or rvc1 data.')
 parser.add_argument('--test_set', default='coco', choices=['coco', 'rvc1'],
                     help='define if we are testing on coco or rvc1 data')
 parser.add_argument('--gt_loc', help='define where ground truth data (as folder of folders or as single file) is.'
@@ -31,14 +31,14 @@ parser.add_argument('--mAP_heatmap', action='store_true', help='flag for dictati
                                                                'locations (not used in papers and not recommended)')
 parser.add_argument('--bbox_gt', action='store_true', help='Flag determines if you want to treat GT as bounding boxes'
                                                            'rather than segmentation masks.')
-parser.add_argument('--prob_seg', action='store_true', help='this flag indicates that the detections are probabilistic'
-                                                            'segmentations and are formatted as such')
 parser.add_argument('--segment_mode', action='store_true', help='This flag indicates that the PDQ should be evaluated'
                                                                 'in segment_mode meaning the background is any pixel'
                                                                 'outside the GT mask not the GT bounding box.'
                                                                 'Note, should only be used for prob_seg at present')
 parser.add_argument('--greedy_mode', action='store_true', help='This flag indicates if detection-GT assignment is done '
                                                                'in a greedy fashion(assigned in order of highest pPDQ)')
+parser.add_argument('--prob_seg', action='store_true', help='this flag indicates that the detections are probabilistic'
+                                                            'segmentations and are formatted as such')
 args = parser.parse_args()
 
 # Define these before using this code

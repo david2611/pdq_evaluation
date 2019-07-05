@@ -10,11 +10,10 @@ import json
 import time
 from itertools import islice
 import sys
-from utils import generate_bounding_box_from_mask
 import os.path as osp
 
 # Temp way to get access to COCO code for now
-sys.path.append('/media/david/storage_device/postdoc_2018-2020/projects/rvc_new_metrics_sandbox/sandbox/evaluator_tools/metric_downloaded_code/cocoapi/PythonAPI/')
+sys.path.append('/path/to/COCO/PythonAPI/')
 from pycocotools.coco import COCO
 
 
@@ -178,12 +177,12 @@ class ProbSegmentLoader:
             yield [
                 ProbSegDetInst(
                     class_list=reorder_classes(det['label_probs'], self.class_assoc),
-                    chosen_label=det['label'],
+                    chosen_label=None if 'label' not in det else det['label'],
                     mask_id=det['mask_id'],
                     detection_file=det['masks_file'],
                     # Only provide a mask root if path given is not absolute
                     mask_root='' if osp.isabs(det['masks_file']) else osp.dirname(osp.abspath(self.det_filename)),
-                    box=det['bbox']
+                    box=None if 'bbox' not in det else det['bbox']
                 )
                 for det in img_dets
                 # Regardless of type, ignore detections below given label threshold if provided

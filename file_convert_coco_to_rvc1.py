@@ -1,7 +1,7 @@
 import read_files
 import argparse
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser('Convert COCO format detection .json file to an RVC1 format detection .json file')
 parser.add_argument('--coco_gt', help='coco format ground-truth .json file')
 parser.add_argument('--coco_det', help='coco format detections .json file')
 parser.add_argument('--rvc1_det', help='where to save .json file in converted rvc1 format')

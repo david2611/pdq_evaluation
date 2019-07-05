@@ -11,7 +11,7 @@ from data_holders import PBoxDetInst
 from tqdm import tqdm
 
 # Input parameters
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(description='Visualise probabilistic detections on a single sequence of images')
 parser.add_argument('--gt_img_folder', help='folder with all gt images in same order as detections provided')
 parser.add_argument('--det_json', help='filename for detection file to be matched with the ground-truth')
 parser.add_argument('--save_folder', help='location where all analysis images will be stored')
@@ -45,7 +45,7 @@ _BG_CLASS_NAMES = ['background', '__background__', '__bg__', 'none']
 _FONTSIZE = 16
 
 
-def save_analysis_img(img_name, img_dets, class_list, save_folder, corner_mode):
+def save_detection_img(img_name, img_dets, class_list, save_folder, corner_mode):
     """
     Generate and save an analysis visualisation image.
     In the image, all ground-truth segmentation masks are overlayed on their objects, class name written in the centre
@@ -124,7 +124,7 @@ def main():
     # Go over each image and draw appropriate
     for img_name, img_dets in tqdm(img_data_sequence, total=len(det_instances), desc='image drawing'):
         if args.img_set is None or os.path.basename(img_name) in args.img_set:
-            save_analysis_img(img_name, img_dets, class_list, args.save_folder, args.corner_mode)
+            save_detection_img(img_name, img_dets, class_list, args.save_folder, args.corner_mode)
 
 
 if __name__ == '__main__':

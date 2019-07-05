@@ -17,7 +17,8 @@ from data_holders import PBoxDetInst
 from tqdm import tqdm
 
 # Input parameters
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(description='Visualise probabilistic detections and PDQ analysis for a single '
+                                             'sequence of images.')
 parser.add_argument('--data_type', choices=['coco', 'rvc1'], help='type of data being evaluated')
 parser.add_argument('--ground_truth', help='file or folder location where ground-truth is kept')
 parser.add_argument('--gt_img_folder', help='folder with all gt images in order of gt_instances')
