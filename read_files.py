@@ -13,7 +13,7 @@ import sys
 import os.path as osp
 
 # Temp way to get access to COCO code for now
-sys.path.append('/path/to/COCO/PythonAPI/')
+sys.path.append('/media/david/storage_device/postdoc_2018-2020/projects/rvc_new_metrics_sandbox/sandbox/evaluator_tools/metric_downloaded_code/cocoapi/PythonAPI/')
 from pycocotools.coco import COCO
 
 

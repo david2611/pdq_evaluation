@@ -116,7 +116,7 @@ class SequenceGTLoader:
         for image_id, image_name in sorted((int(l), l) for l in self._labels.keys()):
             if '_metadata' in self._labels[image_name]:
                 im_mask_name = self._labels[image_name]['_metadata']['mask_name']
-                mask_im = cv2.imread(os.path.join(self._sequence_directory, im_mask_name))
+                mask_im = cv2.imread(os.path.join(self._sequence_directory, im_mask_name), -1)
 
                 yield ImageGTLoader(
                     image_data=self._labels[image_name],

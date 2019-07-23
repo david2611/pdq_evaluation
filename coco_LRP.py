@@ -7,7 +7,7 @@ from convert_to_coco_input import generate_coco_ground_truth_and_detections
 import sys
 
 # Temp way to get access to COCO code for now
-sys.path.append('path/to/COCO/PythonAPI/')
+sys.path.append('/media/david/storage_device/postdoc_2018-2020/projects/rvc_new_metrics_sandbox/sandbox/evaluator_tools/metric_downloaded_code/cocoapi/PythonAPI/')
 from pycocotools.cocoevalLRP import COCOevalLRP
 from pycocotools.coco import COCO
 
