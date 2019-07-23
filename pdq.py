@@ -14,6 +14,7 @@ from scipy.optimize import linear_sum_assignment
 from scipy.stats import gmean
 from multiprocessing import Pool
 from tqdm import tqdm
+from calibration_error_calculator import CECalculator
 
 
 _SMALL_VAL = 1e-14
@@ -49,8 +50,10 @@ class PDQ(object):
         self._tot_FN = 0
         self._det_evals = []
         self._gt_evals = []
+        self._ce_calculator = CECalculator()
 
     def add_img_eval(self, gt_instances, det_instances):
+        # TODO update/remove add_img_eval
         """
         Adds a single image's detections and ground-truth to the overall evaluation analysis.
         :param gt_instances: list of GroundTruthInstance objects present in the given image.
@@ -74,8 +77,13 @@ class PDQ(object):
         Get the current PDQ score for all frames analysed at the current time.
         :return: The average PDQ across all images as a float.
         """
+        # Scaling factor for the label qualities is 1 minus the expected calibration error
+        scaling_factor = 1 - self._ce_calculator.get_expected_calibration_error()
+
         tot_pairs = self._tot_TP + self._tot_FP + self._tot_FN
-        return self._tot_overall_quality/tot_pairs
+
+        # Multiply by sqrt of scaling factor equivalent to scaling factor applied to all label qualities
+        return (scaling_factor**0.5 * self._tot_overall_quality)/float(tot_pairs)
 
     def reset(self):
         """
@@ -92,6 +100,7 @@ class PDQ(object):
         self._tot_FN = 0
         self._det_evals = []
         self._gt_evals = []
+        self._ce_calculator = CECalculator()
 
     def score(self, pdq_param_lists):
         """
@@ -106,11 +115,12 @@ class PDQ(object):
         """
         self.reset()
 
+        # TODO check that CECalculator works with multiprocessing
         pool = Pool(processes=6)
 
         num_imgs = len(pdq_param_lists)
-        for img_results in tqdm(pool.imap(self._get_image_evals, pdq_param_lists),
-                                total=num_imgs, desc='PDQ Images'):
+        for img_results, ce_inputs in tqdm(pool.imap(self._get_image_evals, pdq_param_lists),
+                                           total=num_imgs, desc='PDQ Images'):
             self._tot_overall_quality += img_results['overall']
             self._tot_spatial_quality += img_results['spatial']
             self._tot_label_quality += img_results['label']
@@ -121,6 +131,7 @@ class PDQ(object):
             self._tot_FN += img_results['FN']
             self._det_evals.append(img_results['img_det_evals'])
             self._gt_evals.append(img_results['img_gt_evals'])
+            self._ce_calculator.add_pPDQ_img(*ce_inputs)
 
         pool.close()
         pool.join()
@@ -146,7 +157,10 @@ class PDQ(object):
         :return: average label quality of every assigned detection
         """
         if self._tot_TP > 0.0:
-            return self._tot_label_quality / float(self._tot_TP)
+            # Calculate scaling factor to apply to all label qualities based on overall label calibration
+            # Scaling factor is one minus the expected calibration error of the detector
+            scaling_factor = 1 - self._ce_calculator.get_expected_calibration_error()
+            return (scaling_factor * self._tot_label_quality) / float(self._tot_TP)
         return 0.0
 
     def get_avg_overall_quality_score(self):
@@ -158,7 +172,11 @@ class PDQ(object):
         :return: average overall pairwise quality of every assigned detection
         """
         if self._tot_TP > 0.0:
-            return self._tot_overall_quality / float(self._tot_TP)
+            # Scaling factor for the label qualities is 1 minus the expected calibration error
+            scaling_factor = 1 - self._ce_calculator.get_expected_calibration_error()
+
+            # Multiply by sqrt of scaling factor equivalent to scaling factor applied to all label qualities
+            return (scaling_factor**0.5 * self._tot_overall_quality) / float(self._tot_TP)
         return 0.0
 
     def get_avg_fg_quality_score(self):
@@ -191,6 +209,9 @@ class PDQ(object):
         :return: tuple containing (TP, FP, FN)
         """
         return self._tot_TP, self._tot_FP, self._tot_FN
+
+    def get_ece(self):
+        return self._ce_calculator.get_expected_calibration_error()
 
     def _get_image_evals(self, parameters):
         """
@@ -407,8 +428,11 @@ def _gen_cost_tables(gt_instances, det_instances, segment_mode):
     fg_cost_table[:len(gt_instances), :len(det_instances)] -= fg_qual
     bg_cost_table[:len(gt_instances), :len(det_instances)] -= bg_qual
 
+    # TODO figure out better way to pass this information through to ece
+    ece_inputs = (gt_label_vec, det_label_prob_mat)
+
     return {'overall': overall_cost_table, 'spatial': spatial_cost_table, 'label': label_cost_table,
-            'fg': fg_cost_table, 'bg': bg_cost_table}
+            'fg': fg_cost_table, 'bg': bg_cost_table}, ece_inputs
 
 
 def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_mode):
@@ -439,18 +463,26 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
     # Record the full evaluation details for every match
     img_det_evals = []
     img_gt_evals = []
+    ece_inputs = None
+    ece_gt_ignores = []
 
     # if there are no detections or gt instances respectively the quality is zero
     if len(gt_instances) == 0 or len(det_instances) == 0:
+        FN = 0
         if len(det_instances) > 0:
             img_det_evals = [{"det_id": idx, "gt_id": None, "ignore": False, "matched": False,
                               "pPDQ": 0.0, "spatial": 0.0, "label": 0.0, "correct_class": None,
                               'bg': 0.0, 'fg': 0.0}
                              for idx in range(len(det_instances))]
 
-        # Filter out GT instances which are to be ignored because they are too small
-        FN = 0
-        if len(gt_instances) > 0:
+            ece_inputs = (zip(np.arange(len(det_instances)), np.arange((len(det_instances)))),      # assignments
+                          np.zeros((len(det_instances), len(det_instances))),                       # pPDQ Mat
+                          [],                                                                       # image gt labels
+                          np.array([det.class_list for det in det_instances]),                      # image det probs
+                          ece_gt_ignores)                                                           # gt ignore idxs
+
+        elif len(gt_instances) > 0:
+            # Filter out GT instances which are to be ignored because they are too small
             for gt_idx, gt_instance in enumerate(gt_instances):
                 gt_eval_dict = {"det_id": None, "gt_id": gt_idx, "ignore": False, "matched": False,
                                 "pPDQ": 0.0, "spatial": 0.0, "label": 0.0, "correct_class": gt_instance.class_label,
@@ -459,14 +491,22 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
                     FN += 1
                 else:
                     gt_eval_dict["ignore"] = True
+                    ece_gt_ignores.append(gt_idx)
                 img_gt_evals.append(gt_eval_dict)
 
+            # Note technically could use just FN but current method used for consistency and mental stability
+            ece_inputs = (zip(np.arange(len(gt_instances)), np.arange((len(gt_instances)))),    # assignments
+                          np.zeros((len(gt_instances), len(gt_instances))),                     # pPDQ Mat
+                          [gt.class_label for gt in gt_instances],                              # image gt labels
+                          np.array([]),                                                                   # image det probs
+                          ece_gt_ignores)                                                       # gt ignore idxs
+
         return {'overall': 0.0, 'spatial': 0.0, 'label': 0.0, 'fg': 0.0, 'bg': 0.0, 'TP': 0, 'FP': len(det_instances),
-                'FN': FN, "img_det_evals": img_det_evals, "img_gt_evals": img_gt_evals}
+                'FN': FN, "img_det_evals": img_det_evals, "img_gt_evals": img_gt_evals}, ece_inputs
 
     # For each possible pairing, calculate the quality of that pairing and convert it to a cost
     # to enable use of the Hungarian algorithm.
-    cost_tables = _gen_cost_tables(gt_instances, det_instances, segment_mode)
+    cost_tables, (gt_labels, det_probs) = _gen_cost_tables(gt_instances, det_instances, segment_mode)
 
     # Use the Hungarian algorithm with the cost table to find the best match between ground truth
     # object and detection (lowest overall cost representing highest overall pairwise quality)
@@ -507,6 +547,7 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
                 # ignore detections on samples which are too small to be considered a valid object
                 det_eval_dict["ignore"] = True
                 gt_eval_dict["ignore"] = True
+                ece_gt_ignores.append(row_id)
                 # Set the overall quality table value to zero so it does not get included in final total
                 overall_quality_table[row_id, col_id] = 0.0
             img_det_evals.append(det_eval_dict)
@@ -520,6 +561,7 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
                     false_negatives += 1
                 else:
                     gt_eval_dict["ignore"] = True
+                    ece_gt_ignores.append(row_id)
                 img_gt_evals.append(gt_eval_dict)
 
             if col_id < len(det_instances):
@@ -550,10 +592,18 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
     img_det_evals = [img_det_evals[idx] for idx in np.argsort(img_det_eval_idxs)]
     img_gt_evals = [img_gt_evals[idx] for idx in np.argsort(img_gt_eval_idxs)]
 
+    # Sort out the inputs for the ECE calculator
+    # TODO update how class_label and det_probs are extracted to something neater if possible
+    ece_inputs = (zip(row_idxs, col_idxs),  # assignments
+                  overall_quality_table,    # pPDQ Mat
+                  gt_labels,                # image gt labels
+                  det_probs,                # image det probs
+                  ece_gt_ignores)           # gt ignore idxs
+
     return {'overall': tot_overall_img_quality, 'spatial': tot_tp_spatial_quality, 'label': tot_tp_label_quality,
             'fg': tot_tp_fg_quality, 'bg': tot_tp_bg_quality,
             'TP': true_positives, 'FP': false_positives, 'FN': false_negatives,
-            'img_gt_evals': img_gt_evals, 'img_det_evals': img_det_evals}
+            'img_gt_evals': img_gt_evals, 'img_det_evals': img_det_evals}, ece_inputs
 
 
 def _is_gt_included(gt_instance, filter_gt):

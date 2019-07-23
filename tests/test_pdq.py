@@ -120,7 +120,10 @@ class TestPDQ(unittest.TestCase):
         score_two = evaluator.score([(self.square_gt, two_detections)])
         score_one = evaluator.score([(self.square_gt, one_detection)])
 
-        self.assertAlmostEqual(score_two, 0.5)
+        # Introducing scaling factor for ece calibration
+        scaling_factor_one = 0.5**0.5
+
+        self.assertAlmostEqual(score_two, scaling_factor_one*0.5)
         self.assertAlmostEqual(score_one, 1.0)
 
     def test_no_overlap_box(self):
@@ -144,7 +147,10 @@ class TestPDQ(unittest.TestCase):
         evaluator = PDQ()
         score = evaluator.score([(self.square_gt, ten_detections)])
 
-        self.assertAlmostEqual(score, 0.1)
+        # Introducing new scaling factor for label calibration
+        scaling_factor = 0.1 ** 0.5
+
+        self.assertAlmostEqual(score, 0.1 * scaling_factor)
 
     def test_multiple_missed_gts(self):
 
@@ -158,7 +164,10 @@ class TestPDQ(unittest.TestCase):
         evaluator = PDQ()
         score = evaluator.score([(gts, detections)])
 
-        self.assertAlmostEqual(score, 0.1)
+        # Introducing new scaling factor for label calibration
+        scaling_factor = 0.1 ** 0.5
+
+        self.assertAlmostEqual(score, 0.1 * scaling_factor)
 
     def test_multiple_too_small_gts_filtered(self):
 
@@ -186,7 +195,10 @@ class TestPDQ(unittest.TestCase):
         evaluator = PDQ(filter_gts=False)
         score = evaluator.score([(gts, detections)])
 
-        self.assertAlmostEqual(score, 0.1)
+        # Introducing new scaling factor for label calibration
+        scaling_factor = 0.1**0.5
+
+        self.assertAlmostEqual(score, 0.1*scaling_factor)
 
     def test_missed_gts_and_unmatched_detections(self):
         gts = [val for val in self.square_gt]
@@ -201,7 +213,10 @@ class TestPDQ(unittest.TestCase):
         evaluator = PDQ()
         score = evaluator.score([(gts, detections)])
 
-        self.assertAlmostEqual(score, 1/20.)
+        # Introducing new scaling factor for label calibration
+        scaling_factor = (1/20.)**0.5
+
+        self.assertAlmostEqual(score, scaling_factor * 1/20.)
 
     def test_correct_second_detection(self):
         gts = [val for val in self.square_gt]
@@ -211,7 +226,10 @@ class TestPDQ(unittest.TestCase):
         evaluator = PDQ()
         score = evaluator.score([(gts, detections)])
 
-        self.assertAlmostEqual(score, 0.5)
+        # Introducing scaling factor for ece calibration
+        scaling_factor = 0.5**0.5
+
+        self.assertAlmostEqual(score, 0.5*scaling_factor)
 
     def test_no_detections_for_image(self):
         gts1 = [val for val in self.square_gt]
@@ -221,7 +239,10 @@ class TestPDQ(unittest.TestCase):
         evaluator = PDQ()
         score = evaluator.score([(gts1, dets1), (gts2, dets2)])
 
-        self.assertAlmostEqual(score, 0.5)
+        # Introducing scaling factor for ece calibration
+        scaling_factor = 0.5**0.5
+
+        self.assertAlmostEqual(score, scaling_factor * 0.5)
 
     def test_no_detections_for_image_with_filtered_small_gt(self):
         gts1 = [val for val in self.square_gt]
@@ -246,7 +267,10 @@ class TestPDQ(unittest.TestCase):
         evaluator = PDQ(filter_gts=True)
         score = evaluator.score([(gts1, dets1), (gts2, dets2)])
 
-        self.assertAlmostEqual(score, 0.5)
+        # Introducing scaling factor for ece calibration
+        scaling_factor = 0.5**0.5
+
+        self.assertAlmostEqual(score, scaling_factor*0.5)
 
     # Removed this functionality. Not deemed necessary
     # def test_filter_small_for_one_image_and_not_other(self):
@@ -332,5 +356,39 @@ class TestPDQ(unittest.TestCase):
             for det_eval in img_det_evals:
                 # Assume that big detection should be matched to small gt and small det to big gt
                 self.assertNotEqual(det_eval['det_id'], det_eval['gt_id'])
+
+
+    def test_label_calibration(self):
+        # TODO check this test again
+        correct_label_rates = np.arange(0,1.1, 0.1)
+        label_probabilities = correct_label_rates.copy()
+        num_gts = 10
+        img_gt = [val for val in self.square_gt]
+        gts = [img_gt for img_idx in range(num_gts)]
+        for clr in correct_label_rates:
+            num_correct = int(np.around(num_gts*clr))
+            for label_prob in label_probabilities:
+                correct_det_prob = [label_prob, 1-label_prob]
+                incorrect_det_prob = [ 1 - label_prob, label_prob]
+                correct_dets = [[BBoxDetInst(correct_det_prob, self.square_gt_box)] for idx in range(num_correct)]
+                incorrect_dets = [[BBoxDetInst(incorrect_det_prob, self.square_gt_box)] for idx in range(num_gts-num_correct)]
+                dets = correct_dets+incorrect_dets
+
+                evaluator = PDQ()
+                param_sequence = [(gt, det) for gt, det in zip(gts, dets)]
+                evaluator.score(param_sequence)
+
+                ece = evaluator.get_ece()
+
+                # TODO If possible remove this requirement as it sorta screws things up
+                if label_prob == 0.5:
+                    continue
+
+                if np.isclose(clr, label_prob):
+                    self.assertAlmostEqual(ece, 0)
+                else:
+                    self.assertGreater(ece, 0)
+
+
 
 
