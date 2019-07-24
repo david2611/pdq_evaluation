@@ -131,7 +131,8 @@ class PDQ(object):
             self._tot_FN += img_results['FN']
             self._det_evals.append(img_results['img_det_evals'])
             self._gt_evals.append(img_results['img_gt_evals'])
-            self._ce_calculator.add_pPDQ_img(*ce_inputs)
+            if ce_inputs is not None:
+                self._ce_calculator.add_pPDQ_img(*ce_inputs)
 
         pool.close()
         pool.join()

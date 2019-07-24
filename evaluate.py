@@ -185,8 +185,8 @@ def main():
           "moLRPLoc:{11:4f}\n"
           "moLRPFP:{12:4f}\n"
           "moLRPFN:{13:4f}\n".format(pdq, mAP, avg_overall_quality, avg_spatial_quality,
-                                    avg_label_quality, avg_fg_quality, avg_bg_quality, TP, FP, FN,
-                                    LRP_dict['moLRP'], LRP_dict['moLRPLoc'], LRP_dict['moLRPFP'], LRP_dict['moLRPFN']))
+                                     avg_label_quality, avg_fg_quality, avg_bg_quality, TP, FP, FN,
+                                     LRP_dict['moLRP'], LRP_dict['moLRPLoc'], LRP_dict['moLRPFP'], LRP_dict['moLRPFN']))
 
     # Save evaluation statistics to file
     with open(os.path.join(args.save_folder, 'scores.txt'), 'w') as output_file:

@@ -90,7 +90,7 @@ class CECalculator(object):
                 if gt_idx < len(img_gt_labels):
                     # Deal with image with no detections
                     if img_det_probs.shape[0] == 0:
-                        det_prob_shape = 1
+                        det_prob_shape = np.amax(img_gt_labels)
                     else:
                         det_prob_shape = img_det_probs.shape[1]
 
