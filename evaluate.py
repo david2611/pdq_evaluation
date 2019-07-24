@@ -10,8 +10,6 @@ import rvc1_gt_loader
 import rvc1_submission_loader
 from coco_LRP import coco_LRP
 
-_NUM_VALID = 4
-
 # Input parameters
 parser = argparse.ArgumentParser(description='Perform PDQ, mAP, and moLRP evaluation on either coco or rvc1 data.')
 parser.add_argument('--test_set', default='coco', choices=['coco', 'rvc1'],
@@ -108,8 +106,10 @@ def gen_param_sequence():
     elif args.test_set == 'rvc1':
         # output is a list of generator of generators of GTInstance objects
         all_gt_instances = rvc1_gt_loader.read_ground_truth(rvc1_gt_folder, bbox_gt=args.bbox_gt)
+        # Currently set this version to assume there is a .json file for all sequences in ground-truth
         all_det_instances = rvc1_submission_loader.read_submission(args.det_loc,
-                                                                   ["{0:06d}".format(idx) for idx in range(_NUM_VALID)],
+                                                                   ["{0:06d}".format(idx) for idx in
+                                                                    range(len(all_gt_instances))],
                                                                    override_cov=args.set_cov)
 
     else:
@@ -186,8 +186,8 @@ def main():
           "moLRPLoc:{11:4f}\n"
           "moLRPFP:{12:4f}\n"
           "moLRPFN:{13:4f}\n".format(pdq, mAP, avg_overall_quality, avg_spatial_quality,
-                                    avg_label_quality, avg_fg_quality, avg_bg_quality, TP, FP, FN,
-                                    LRP_dict['moLRP'], LRP_dict['moLRPLoc'], LRP_dict['moLRPFP'], LRP_dict['moLRPFN']))
+                                     avg_label_quality, avg_fg_quality, avg_bg_quality, TP, FP, FN,
+                                     LRP_dict['moLRP'], LRP_dict['moLRPLoc'], LRP_dict['moLRPFP'], LRP_dict['moLRPFN']))
 
     # Save evaluation statistics to file
     with open(os.path.join(args.save_folder, 'scores.txt'), 'w') as output_file:
