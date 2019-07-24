@@ -10,8 +10,6 @@ import rvc1_gt_loader
 import rvc1_submission_loader
 from coco_LRP import coco_LRP
 
-_NUM_VALID = 4
-
 # Input parameters
 parser = argparse.ArgumentParser(description='Perform PDQ, mAP, and moLRP evaluation on either coco or rvc1 data.')
 parser.add_argument('--test_set', default='coco', choices=['coco', 'rvc1'],
@@ -109,7 +107,8 @@ def gen_param_sequence():
         # output is a list of generator of generators of GTInstance objects
         all_gt_instances = rvc1_gt_loader.read_ground_truth(rvc1_gt_folder, bbox_gt=args.bbox_gt)
         all_det_instances = rvc1_submission_loader.read_submission(args.det_loc,
-                                                                   ["{0:06d}".format(idx) for idx in range(_NUM_VALID)],
+                                                                   ["{0:06d}".format(idx) for idx in
+                                                                    range(len(all_gt_instances))],
                                                                    override_cov=args.set_cov)
 
     else:
