@@ -47,6 +47,7 @@ class PDQ(object):
         self._tot_TP = 0
         self._tot_FP = 0
         self._tot_FN = 0
+        self._tot_fp_cost = 0.0
         self._det_evals = []
         self._gt_evals = []
 
@@ -66,6 +67,7 @@ class PDQ(object):
         self._tot_TP += results['TP']
         self._tot_FP += results['FP']
         self._tot_FN += results['FN']
+        self._tot_fp_cost += results['fp_cost']
         self._det_evals.append(results['img_det_evals'])
         self._gt_evals.append(results['img_gt_evals'])
 
@@ -74,8 +76,8 @@ class PDQ(object):
         Get the current PDQ score for all frames analysed at the current time.
         :return: The average PDQ across all images as a float.
         """
-        tot_pairs = self._tot_TP + self._tot_FP + self._tot_FN
-        return self._tot_overall_quality/tot_pairs
+        denominator = self._tot_TP + self._tot_FN + self._tot_fp_cost
+        return self._tot_overall_quality/denominator
 
     def reset(self):
         """
@@ -90,6 +92,7 @@ class PDQ(object):
         self._tot_TP = 0
         self._tot_FP = 0
         self._tot_FN = 0
+        self._tot_fp_cost = 0.0
         self._det_evals = []
         self._gt_evals = []
 
@@ -119,6 +122,7 @@ class PDQ(object):
             self._tot_TP += img_results['TP']
             self._tot_FP += img_results['FP']
             self._tot_FN += img_results['FN']
+            self._tot_fp_cost += img_results['fp_cost']
             self._det_evals.append(img_results['img_det_evals'])
             self._gt_evals.append(img_results['img_gt_evals'])
 
@@ -147,6 +151,11 @@ class PDQ(object):
         """
         if self._tot_TP > 0.0:
             return self._tot_label_quality / float(self._tot_TP)
+        return 0.0
+
+    def get_avg_fp_label_score(self):
+        if self._tot_FP > 0:
+            return (self._tot_FP - self._tot_fp_cost) / self._tot_FP
         return 0.0
 
     def get_avg_overall_quality_score(self):
@@ -439,6 +448,7 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
     # Record the full evaluation details for every match
     img_det_evals = []
     img_gt_evals = []
+    tot_fp_cost = 0
 
     # if there are no detections or gt instances respectively the quality is zero
     if len(gt_instances) == 0 or len(det_instances) == 0:
@@ -447,6 +457,7 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
                               "pPDQ": 0.0, "spatial": 0.0, "label": 0.0, "correct_class": None,
                               'bg': 0.0, 'fg': 0.0}
                              for idx in range(len(det_instances))]
+            tot_fp_cost = np.sum([np.max(det_instance.class_list) for det_instance in det_instances])
 
         # Filter out GT instances which are to be ignored because they are too small
         FN = 0
@@ -462,7 +473,7 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
                 img_gt_evals.append(gt_eval_dict)
 
         return {'overall': 0.0, 'spatial': 0.0, 'label': 0.0, 'fg': 0.0, 'bg': 0.0, 'TP': 0, 'FP': len(det_instances),
-                'FN': FN, "img_det_evals": img_det_evals, "img_gt_evals": img_gt_evals}
+                'FN': FN, "img_det_evals": img_det_evals, "img_gt_evals": img_gt_evals, 'fp_cost': tot_fp_cost}
 
     # For each possible pairing, calculate the quality of that pairing and convert it to a cost
     # to enable use of the Hungarian algorithm.
@@ -487,6 +498,7 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
     true_positives = 0
     false_positives = 0
     false_negatives = 0
+    false_positive_idxs = []
 
     for match_idx, match in enumerate(zip(row_idxs, col_idxs)):
         row_id, col_id = match
@@ -526,6 +538,7 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
                 det_eval_dict["gt_id"] = None
                 det_eval_dict["matched"] = False
                 false_positives += 1
+                false_positive_idxs.append(col_id)
                 img_det_evals.append(det_eval_dict)
 
     # Calculate the sum of quality at the best matching pairs to calculate total qualities for the image
@@ -544,6 +557,9 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
     tot_tp_fg_quality = np.sum(fg_quality_table[row_idxs, col_idxs])
     tot_tp_bg_quality = np.sum(bg_quality_table[row_idxs, col_idxs])
 
+    # Calculate the penalty for assigning a high label probability to false positives
+    tot_fp_cost = np.sum([np.max(det_instances[i].class_list) for i in false_positive_idxs])
+
     # Sort the evaluation details to match the order of the detections and ground truths
     img_det_eval_idxs = [det_eval_dict["det_id"] for det_eval_dict in img_det_evals]
     img_gt_eval_idxs = [gt_eval_dict["gt_id"] for gt_eval_dict in img_gt_evals]
@@ -553,7 +569,7 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
     return {'overall': tot_overall_img_quality, 'spatial': tot_tp_spatial_quality, 'label': tot_tp_label_quality,
             'fg': tot_tp_fg_quality, 'bg': tot_tp_bg_quality,
             'TP': true_positives, 'FP': false_positives, 'FN': false_negatives,
-            'img_gt_evals': img_gt_evals, 'img_det_evals': img_det_evals}
+            'img_gt_evals': img_gt_evals, 'img_det_evals': img_det_evals, 'fp_cost':tot_fp_cost}
 
 
 def _is_gt_included(gt_instance, filter_gt):
