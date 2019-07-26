@@ -26,7 +26,8 @@ class PDQ(object):
     Extension of the code used in the 1st robotic vision challenge (RVC1) code.
     Link to RVC1 PDQ code: https://github.com/jskinn/rvchallenge-evaluation/blob/master/pdq.py
     """
-    def __init__(self, filter_gts=False, segment_mode=False, greedy_mode=False):
+    def __init__(self, filter_gts=False, segment_mode=False, greedy_mode=False, mce_mode=False, ce_max_class=False,
+                 ce_no_fn=False):
         """
         Initialisation function for PDQ evaluator.
         :param filter_gts: boolean describing if output should be filtered by ground-truth size (used for rvc1 only)
@@ -39,6 +40,9 @@ class PDQ(object):
         super(PDQ, self).__init__()
         self.greedy_mode = greedy_mode
         self.segment_mode = segment_mode
+        self.mce_mode = mce_mode
+        self.ce_max_class = ce_max_class
+        self.ce_no_fn = ce_no_fn
         self.filter_gts = filter_gts
         self._tot_overall_quality = 0.0
         self._tot_spatial_quality = 0.0
@@ -50,7 +54,7 @@ class PDQ(object):
         self._tot_FN = 0
         self._det_evals = []
         self._gt_evals = []
-        self._ce_calculator = CECalculator()
+        self._ce_calculator = CECalculator(ce_max_class=ce_max_class, ce_no_fn=ce_no_fn)
 
     def add_img_eval(self, gt_instances, det_instances):
         # TODO update/remove add_img_eval
@@ -77,8 +81,11 @@ class PDQ(object):
         Get the current PDQ score for all frames analysed at the current time.
         :return: The average PDQ across all images as a float.
         """
-        # Scaling factor for the label qualities is 1 minus the expected calibration error
-        scaling_factor = 1 - self._ce_calculator.get_expected_calibration_error()
+        # Scaling factor for the label qualities is 1 minus the calibration error
+        if self.mce_mode:
+            scaling_factor = 1 - self._ce_calculator.get_maximum_calibration_error()
+        else:
+            scaling_factor = 1 - self._ce_calculator.get_expected_calibration_error()
 
         tot_pairs = self._tot_TP + self._tot_FP + self._tot_FN
 
@@ -100,7 +107,7 @@ class PDQ(object):
         self._tot_FN = 0
         self._det_evals = []
         self._gt_evals = []
-        self._ce_calculator = CECalculator()
+        self._ce_calculator = CECalculator(ce_max_class=self.ce_max_class, ce_no_fn=self.ce_no_fn)
 
     def score(self, pdq_param_lists):
         """
@@ -159,8 +166,11 @@ class PDQ(object):
         """
         if self._tot_TP > 0.0:
             # Calculate scaling factor to apply to all label qualities based on overall label calibration
-            # Scaling factor is one minus the expected calibration error of the detector
-            scaling_factor = 1 - self._ce_calculator.get_expected_calibration_error()
+            # Scaling factor for the label qualities is 1 minus the calibration error
+            if self.mce_mode:
+                scaling_factor = 1 - self._ce_calculator.get_maximum_calibration_error()
+            else:
+                scaling_factor = 1 - self._ce_calculator.get_expected_calibration_error()
             return (scaling_factor * self._tot_label_quality) / float(self._tot_TP)
         return 0.0
 
@@ -173,8 +183,11 @@ class PDQ(object):
         :return: average overall pairwise quality of every assigned detection
         """
         if self._tot_TP > 0.0:
-            # Scaling factor for the label qualities is 1 minus the expected calibration error
-            scaling_factor = 1 - self._ce_calculator.get_expected_calibration_error()
+            # Scaling factor for the label qualities is 1 minus the calibration error
+            if self.mce_mode:
+                scaling_factor = 1 - self._ce_calculator.get_maximum_calibration_error()
+            else:
+                scaling_factor = 1 - self._ce_calculator.get_expected_calibration_error()
 
             # Multiply by sqrt of scaling factor equivalent to scaling factor applied to all label qualities
             return (scaling_factor**0.5 * self._tot_overall_quality) / float(self._tot_TP)
@@ -211,8 +224,13 @@ class PDQ(object):
         """
         return self._tot_TP, self._tot_FP, self._tot_FN
 
-    def get_ece(self):
-        return self._ce_calculator.get_expected_calibration_error()
+    def get_label_scaling_factor(self):
+        # Scaling factor for the label qualities is 1 minus the calibration error
+        if self.mce_mode:
+            scaling_factor = 1 - self._ce_calculator.get_maximum_calibration_error()
+        else:
+            scaling_factor = 1 - self._ce_calculator.get_expected_calibration_error()
+        return scaling_factor
 
     def _get_image_evals(self, parameters):
         """

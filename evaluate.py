@@ -37,6 +37,12 @@ parser.add_argument('--greedy_mode', action='store_true', help='This flag indica
                                                                'in a greedy fashion(assigned in order of highest pPDQ)')
 parser.add_argument('--prob_seg', action='store_true', help='this flag indicates that the detections are probabilistic'
                                                             'segmentations and are formatted as such')
+parser.add_argument('--mce_mode', action='store_true', help='Define if label scaling factor is based on maximum '
+                                                            'calibration error rather than expected calibration error')
+parser.add_argument('--ce_max_class', action='store_true', help='Flag determines if ECE is calculated using only the'
+                                                                'max class rather than full prob distribution')
+parser.add_argument('--ce_no_fn', action='store_true', help='flag dictating if false negatives should be ignored when'
+                                                            'calculating calibration errors.')
 args = parser.parse_args()
 
 # Define these before using this code
@@ -130,7 +136,8 @@ def main():
     print("Calculating PDQ")
 
     # Get summary statistics (PDQ, avg_qualities)
-    evaluator = PDQ(filter_gts=(args.test_set == 'rvc1'), segment_mode=args.segment_mode, greedy_mode=args.greedy_mode)
+    evaluator = PDQ(filter_gts=(args.test_set == 'rvc1'), segment_mode=args.segment_mode, greedy_mode=args.greedy_mode,
+                    mce_mode=args.mce_mode, ce_max_class=args.ce_max_class, ce_no_fn=args.ce_no_fn)
     pdq = evaluator.score(param_sequence)
     TP, FP, FN = evaluator.get_assignment_counts()
     avg_spatial_quality = evaluator.get_avg_spatial_score()
@@ -138,6 +145,7 @@ def main():
     avg_overall_quality = evaluator.get_avg_overall_quality_score()
     avg_fg_quality = evaluator.get_avg_fg_quality_score()
     avg_bg_quality = evaluator.get_avg_bg_quality_score()
+    label_scaling_factor = evaluator.get_label_scaling_factor()
 
     # Get the detection-wise and ground-truth-wise qualities and matches for PDQ and save them to file
     all_gt_eval_dicts = evaluator._gt_evals
@@ -170,22 +178,23 @@ def main():
     # Compile evaluation statistics into a single dictionary
     result = {"PDQ": pdq, "avg_pPDQ": avg_overall_quality, "avg_spatial": avg_spatial_quality,
               'avg_fg': avg_fg_quality, 'avg_bg': avg_bg_quality,
-              "avg_label": avg_label_quality, "TP": TP, "FP": FP, "FN": FN, 'mAP': mAP,
-              'moLRP': LRP_dict['moLRP'], 'moLRPLoc': LRP_dict['moLRPLoc'], 'moLRPFP': LRP_dict['moLRPFP'],
-              'moLRPFN': LRP_dict['moLRPFN']}
+              "avg_label": avg_label_quality, "label_scaling_factor": label_scaling_factor, "TP": TP, "FP": FP,
+              "FN": FN, 'mAP': mAP, 'moLRP': LRP_dict['moLRP'], 'moLRPLoc': LRP_dict['moLRPLoc'],
+              'moLRPFP': LRP_dict['moLRPFP'], 'moLRPFN': LRP_dict['moLRPFN']}
     print("PDQ: {0:4f}\n"
           "mAP: {1:4f}\n"
           "avg_pPDQ:{2:4f}\n"
           "avg_spatial:{3:4f}\n"
           "avg_label:{4:4f}\n"
-          "avg_foreground:{5:4f}\n"
-          "avg_background:{6:4f}\n"
-          "TP:{7}\nFP:{8}\nFN:{9}\n"
-          "moLRP:{10:4f}\n"
-          "moLRPLoc:{11:4f}\n"
-          "moLRPFP:{12:4f}\n"
-          "moLRPFN:{13:4f}\n".format(pdq, mAP, avg_overall_quality, avg_spatial_quality,
-                                     avg_label_quality, avg_fg_quality, avg_bg_quality, TP, FP, FN,
+          "label_scaling_factor:{5:.4f}\n"
+          "avg_foreground:{6:4f}\n"
+          "avg_background:{7:4f}\n"
+          "TP:{8}\nFP:{9}\nFN:{10}\n"
+          "moLRP:{11:4f}\n"
+          "moLRPLoc:{12:4f}\n"
+          "moLRPFP:{13:4f}\n"
+          "moLRPFN:{14:4f}\n".format(pdq, mAP, avg_overall_quality, avg_spatial_quality, avg_label_quality,
+                                     label_scaling_factor, avg_fg_quality, avg_bg_quality, TP, FP, FN,
                                      LRP_dict['moLRP'], LRP_dict['moLRPLoc'], LRP_dict['moLRPFP'], LRP_dict['moLRPFN']))
 
     # Save evaluation statistics to file
