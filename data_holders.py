@@ -47,6 +47,10 @@ class GroundTruthInstance(object):
         else:
             self.num_pixels = np.count_nonzero(segmentation_mask)
 
+        # Calculate the number of pixels in the ground-truth bounding box (length x height)
+        self.num_bbox_pixels = (self.bounding_box[2]+1 - self.bounding_box[0]) * \
+                               (self.bounding_box[3]+1 - self.bounding_box[1])
+
         # ensure that a coco area is provided if not explicitly
         if self.coco_area is None:
             self.coco_area = self.num_pixels

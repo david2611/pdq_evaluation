@@ -219,17 +219,19 @@ def _vectorize_img_gts(gt_instances, img_shape, segment_mode):
     :param img_shape: shape of the image that the GroundTruthInstances lie within
     :param segment_mode: boolean describing if we are in segment mode or not. If so, then the background region is
     outside the ground-truth segmentation mask and if not, it is the region outside the ground-truth bounding box.
-    :return: (gt_seg_mat, bg_seg_mat, num_fg_pixels_vec, gt_label_vec).
+    :return: (gt_seg_mat, bg_seg_mat, num_fg_pixels_vec, num_box_pixels_vec, gt_label_vec).
     gt_seg_mat: h x w x g boolean numpy array depicting the ground truth pixels for each of the g GroundTruthInstances
     within an h x w image.
     bg_seg_mat: h x w x g boolean numpy array depicting the background pixels for each of the g GroundTruthInstances
     (pixels outside the segmentation mask or bounding box depending on mode) within an h x w image.
     num_fg_pixels_vec: g x 1 int numpy array containing the number of foreground (object) pixels for each of
     the g GroundTruthInstances.
+    num_box_pixels_vec: g x 1 number of pixels within each of the g ground-truth objects' bounding box
     gt_label_vec: g, numpy array containing the class label as an integer for each of the g GroundTruthInstances
     """
     gt_seg_mat = np.stack([gt_instance.segmentation_mask for gt_instance in gt_instances], axis=2)   # h x w x g
     num_fg_pixels_vec = np.array([[gt_instance.num_pixels] for gt_instance in gt_instances], dtype=np.int)  # g x 1
+    num_box_pixels_vec = np.array([[gt_instance.num_bbox_pixels] for gt_instance in gt_instances], dtype=np.int)  # g x 1
     gt_label_vec = np.array([gt_instance.class_label for gt_instance in gt_instances], dtype=np.int)        # g,
 
     if segment_mode:
@@ -240,7 +242,7 @@ def _vectorize_img_gts(gt_instances, img_shape, segment_mode):
             gt_box = gt_instance.bounding_box
             bg_seg_mat[gt_box[1]:gt_box[3]+1, gt_box[0]:gt_box[2]+1, gt_idx] = False
 
-    return gt_seg_mat, bg_seg_mat, num_fg_pixels_vec, gt_label_vec
+    return gt_seg_mat, bg_seg_mat, num_fg_pixels_vec, num_box_pixels_vec, gt_label_vec
 
 
 def _vectorize_img_dets(det_instances, img_shape):
@@ -297,20 +299,23 @@ def _safe_log(mat):
     return np.log(mat + _SMALL_VAL)
 
 
-def _calc_spatial_qual(fg_loss_sum, bg_loss_sum, num_fg_pixels_vec):
+def _calc_spatial_qual(fg_loss_sum, bg_loss_sum, num_fg_pixels_vec, num_box_pixels_vec):
     """
     Calculate the spatial quality for all detections on all ground truth objects for a given image.
     :param fg_loss_sum: g x d total foreground loss between each of the g ground truth objects and d detections.
     :param bg_loss_sum: g x d total background loss between each of the g ground truth objects and d detections.
     :param num_fg_pixels_vec: g x 1 number of pixels for each of the g ground truth objects.
+    :param num_box_pixels_vec: g x 1 number of pixels within each of the g ground-truth objects' bounding box
     :return: spatial_quality: g x d spatial quality score between zero and one for each possible combination of
     g ground truth objects and d detections.
     """
-    total_loss = fg_loss_sum + bg_loss_sum
+    fg_loss_per_gt_pixel = fg_loss_sum/num_fg_pixels_vec
 
-    loss_per_gt_pixel = total_loss/num_fg_pixels_vec
+    bg_loss_per_gt_box_pixel = bg_loss_sum/num_box_pixels_vec
 
-    spatial_quality = np.exp(loss_per_gt_pixel)
+    average_spatial_loss = (0.5*fg_loss_per_gt_pixel) + (0.5*bg_loss_per_gt_box_pixel)
+
+    spatial_quality = np.exp(average_spatial_loss)
 
     # Deal with tiny floating point errors or tiny errors caused by _SMALL_VAL that prevent perfect 0 or 1 scores
     spatial_quality[np.isclose(spatial_quality, 0)] = 0
@@ -373,7 +378,9 @@ def _gen_cost_tables(gt_instances, det_instances, segment_mode):
     img_shape = gt_instances[0].segmentation_mask.shape
 
     # Generate all the matrices needed for calculations
-    gt_seg_mat, bg_seg_mat, num_fg_pixels_vec, gt_label_vec = _vectorize_img_gts(gt_instances, img_shape, segment_mode)
+    gt_seg_mat, bg_seg_mat, num_fg_pixels_vec, num_box_pixels_vec, gt_label_vec = _vectorize_img_gts(gt_instances,
+                                                                                                     img_shape,
+                                                                                                     segment_mode)
     img_shape = gt_instances[0].segmentation_mask.shape
     det_seg_heatmap_mat, det_label_prob_mat = _vectorize_img_dets(det_instances, img_shape)
 
@@ -381,7 +388,7 @@ def _gen_cost_tables(gt_instances, det_instances, segment_mode):
     label_qual_mat = _calc_label_qual(gt_label_vec, det_label_prob_mat)
     fg_loss = _calc_fg_loss(gt_seg_mat, det_seg_heatmap_mat)
     bg_loss = _calc_bg_loss(bg_seg_mat, det_seg_heatmap_mat)
-    spatial_qual = _calc_spatial_qual(fg_loss, bg_loss, num_fg_pixels_vec)
+    spatial_qual = _calc_spatial_qual(fg_loss, bg_loss, num_fg_pixels_vec, num_box_pixels_vec)
 
     # Calculate foreground quality
     fg_loss_per_gt_pixel = fg_loss/num_fg_pixels_vec
