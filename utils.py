@@ -107,3 +107,8 @@ def draw_ellipse_corner(ax, centre, width1, height1, dx, dy, colour):
                          linewidth=2, edgecolor=colour, facecolor=None, fill=False))
     ax.add_patch(Ellipse(centre, width=3*width1, height=3*height1, angle=tl_angle,
                          linewidth=2, edgecolor=colour, facecolor=None, fill=False))
+
+
+def to_float_list(box_coords):
+    float_list = [float(val) for val in box_coords]
+    return float_list

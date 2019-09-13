@@ -14,6 +14,7 @@ from scipy.optimize import linear_sum_assignment
 from scipy.stats import gmean
 from multiprocessing import Pool
 from tqdm import tqdm
+from utils import to_float_list
 
 
 _SMALL_VAL = 1e-14
@@ -445,7 +446,9 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
         if len(det_instances) > 0:
             img_det_evals = [{"det_id": idx, "gt_id": None, "ignore": False, "matched": False,
                               "pPDQ": 0.0, "spatial": 0.0, "label": 0.0, "correct_class": None,
-                              'bg': 0.0, 'fg': 0.0}
+                              'bg': 0.0, 'fg': 0.0, "det_bbox": to_float_list(det_instances[idx].box),
+                              "chosen_class": int(np.argmax(det_instances[idx].class_list)),
+                              "correct_conf": None, "chosen_conf": float(np.amax(det_instances[idx].class_list))}
                              for idx in range(len(det_instances))]
 
         # Filter out GT instances which are to be ignored because they are too small
@@ -454,7 +457,7 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
             for gt_idx, gt_instance in enumerate(gt_instances):
                 gt_eval_dict = {"det_id": None, "gt_id": gt_idx, "ignore": False, "matched": False,
                                 "pPDQ": 0.0, "spatial": 0.0, "label": 0.0, "correct_class": gt_instance.class_label,
-                                'fg': 0.0, 'bg': 0.0}
+                                'fg': 0.0, 'bg': 0.0, "gt_bbox": to_float_list(gt_instance.bounding_box)}
                 if _is_gt_included(gt_instance, filter_gt):
                     FN += 1
                 else:
@@ -496,11 +499,18 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
                          "label": float(label_quality_table[row_id, col_id]),
                          'fg': float(fg_quality_table[row_id, col_id]),
                          'bg': float(bg_quality_table[row_id, col_id]),
-                         "correct_class": None}
+                         "correct_class": None, "chosen_class": None,
+                         "correct_conf": None, "chosen_conf": None
+        }
         gt_eval_dict = det_eval_dict.copy()
         if overall_quality_table[row_id, col_id] > 0:
             det_eval_dict["correct_class"] = gt_instances[row_id].class_label
+            det_eval_dict["correct_conf"] = float(det_instances[col_id].class_list[gt_instances[row_id].class_label])
+            det_eval_dict["chosen_class"] = int(np.argmax(det_instances[col_id].class_list))
+            det_eval_dict["chosen_conf"] = float(np.amax(det_instances[col_id].class_list))
+            det_eval_dict['det_bbox'] = to_float_list(det_instances[col_id].box)
             gt_eval_dict["correct_class"] = gt_instances[row_id].class_label
+            gt_eval_dict['gt_bbox'] = to_float_list(gt_instances[row_id].bounding_box)
             if row_id < len(gt_instances) and _is_gt_included(gt_instances[row_id], filter_gt):
                 true_positives += 1
             else:
@@ -514,6 +524,7 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
         else:
             if row_id < len(gt_instances):
                 gt_eval_dict["correct_class"] = gt_instances[row_id].class_label
+                gt_eval_dict['gt_bbox'] = to_float_list(gt_instances[row_id].bounding_box)
                 gt_eval_dict["det_id"] = None
                 gt_eval_dict["matched"] = False
                 if _is_gt_included(gt_instances[row_id], filter_gt):
@@ -525,6 +536,9 @@ def _calc_qual_img(gt_instances, det_instances, filter_gt, segment_mode, greedy_
             if col_id < len(det_instances):
                 det_eval_dict["gt_id"] = None
                 det_eval_dict["matched"] = False
+                det_eval_dict['det_bbox'] = to_float_list(det_instances[col_id].box)
+                det_eval_dict["chosen_class"] = int(np.argmax(det_instances[col_id].class_list))
+                det_eval_dict["chosen_conf"] = float(np.amax(det_instances[col_id].class_list))
                 false_positives += 1
                 img_det_evals.append(det_eval_dict)
 

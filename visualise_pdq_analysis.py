@@ -28,8 +28,10 @@ parser.add_argument('--gt_analysis', help='filename for json containing ground-t
 parser.add_argument('--save_folder', help='location where all analysis images will be stored')
 parser.add_argument('--set_cov', type=float, help='set covariance for all det corners')
 parser.add_argument('--img_type', help='type of image in gt_img_folder (png or jpg)')
-parser.add_argument('--full_info', action='store_true', help='flag for stating if all pPDQ information should be'
-                                                             'displayed as part of the figure.')
+parser.add_argument('--info_level', type=str, default='med', choices=['min', 'med', 'max'],
+                    help='Parameter defining the amount of info to be printed on the image.'
+                         'min = only detection/gt idxs, med=min + gt_class and det max_class, max=med + '
+                         'pairwise stats for matches (pPDQ, spatial quality, label quality)')
 parser.add_argument('--img_set', nargs='+', help='list of img files to create visualisations for. '
                                                  'Note that if none is provided, all images are used')
 parser.add_argument('--colour_mode', choices=['gr', 'bo'], default='bo',
@@ -97,7 +99,7 @@ def load_gt_and_det_data(gt_loc, det_json, data_type):
 
 
 def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_analysis, class_list, save_folder,
-                      full_info, corner_mode):
+                      info_level, corner_mode):
     """
     Generate and save an analysis visualisation image.
     In the image, all ground-truth segmentation masks are overlayed on their objects, class name written in the centre
@@ -124,13 +126,16 @@ def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_anal
     img = cv2.imread(img_name)
     b, g, r = cv2.split(img)
     img = cv2.merge([r, g, b])
+
+    img_font_size = _FONTSIZE * (max(img.shape)/1200)
     ratio = img.shape[0]/float(img.shape[1])
     # Set savefile image to be 12 inches max dimension for clarity
     if ratio <= 1:
         fig_size = (12, 12*ratio)
     else:
         fig_size = (12*(1/ratio), 12)
-    fig = plt.figure(figsize=fig_size)
+    fig = plt.figure(figsize=(img.shape[1] / 100., img.shape[0] / 100.))
+    # fig = plt.figure(figsize=fig_size)
     ax = plt.Axes(fig, [0., 0., 1., 1.])
     ax.set_axis_off()
     ax.imshow(img)
@@ -159,9 +164,12 @@ def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_anal
         gt_box = gt_inst.bounding_box
         textx = ((gt_box[2] - gt_box[0])/2.)+gt_box[0]
         texty = ((gt_box[3] - gt_box[1]) / 2.) + gt_box[1]
-        label_string = '({:d}) {:s}'.format(gt_idx, label)
+        if info_level != "min":
+            label_string = '({:d}) {:s}'.format(gt_idx, label)
+        else:
+            label_string = '({:d})'.format(gt_idx)
         ax.text(textx, texty, label_string, horizontalalignment='center',
-                verticalalignment='center', bbox=dict(facecolor=text_box_colour, alpha=0.3), fontsize=_FONTSIZE)
+                verticalalignment='center', bbox=dict(facecolor=text_box_colour, alpha=0.3), fontsize=img_font_size)
 
     # add detection boxes to the image
     for det_idx, (det_inst, det_analysis) in enumerate(zip(img_dets, img_det_analysis)):
@@ -184,7 +192,7 @@ def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_anal
             utils.draw_cov(det_box, det_covs, ax, colour=colour, mode=corner_mode)
 
         # Write text
-        if det_analysis['matched'] and full_info:
+        if det_analysis['matched'] and info_level == 'max':
             # Provide pairwise analysis statistics if asked for them and matched
             correct_class = class_list[det_analysis['correct_class']]
             max_class = class_list[np.argmax(det_inst.class_list)]
@@ -195,7 +203,7 @@ def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_anal
                                                         det_analysis['spatial'], det_analysis['label'],
                                                         max_class, np.amax(det_inst.class_list))
 
-        else:
+        elif info_level == 'med':
             # Detections without full statistics state their max non-none class and confidence thereof
             max_class = class_list[np.argmax(det_inst.class_list)]
             max_score = np.amax(det_inst.class_list)
@@ -207,8 +215,11 @@ def save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_anal
                 max_score = det_inst.class_list[np.argsort(det_inst.class_list)[-2]]
             det_str = '[{0}]: {1} {2:.3f}'.format(det_idx, max_class, max_score)
 
+        else:
+            det_str = '[{0}]'.format(det_idx)
+
         ax.text(det_box[0], det_box[1], det_str, horizontalalignment='left',
-                verticalalignment='top', bbox=dict(facecolor='white', alpha=0.3), fontsize=_FONTSIZE)
+                verticalalignment='top', bbox=dict(facecolor='white', alpha=0.3), fontsize=img_font_size)
 
     # Save final image to file
     save_file = os.path.join(save_folder, os.path.splitext(os.path.basename(img_name))[0]+'.png')
@@ -248,7 +259,7 @@ def main():
                                                                                ):
         if args.img_set is None or os.path.basename(img_name) in args.img_set:
             save_analysis_img(img_name, img_gts, img_dets, img_gt_analysis, img_det_analysis, class_list,
-                              args.save_folder, args.full_info, args.corner_mode)
+                              args.save_folder, args.info_level, args.corner_mode)
 
 
 if __name__ == '__main__':
