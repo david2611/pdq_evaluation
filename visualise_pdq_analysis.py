@@ -237,8 +237,13 @@ def main():
     if len(det_instances) != len(det_analysis):
         sys.exit("ERROR! det_instances and det_analysis are not the same length."
                  "\ndet_instances: {0}, det_analysis: {1}".format(len(det_instances), len(det_analysis)))
+    
+    all_images = sorted(glob.glob(os.path.join(args.gt_img_folder, '*.'+args.img_type)))
+    if len(all_images) != len(det_instances):
+        sys.exit("ERROR! Ground truth images (--gt_img_folder) and det_instances are not the same length."
+                 "\ngt_img_folder: {0}, det_instances: {1}".format(len(all_images), len(det_instances)))
 
-    img_data_sequence = zip(sorted(glob.glob(os.path.join(args.gt_img_folder, '*.'+args.img_type))),
+    img_data_sequence = zip(all_images,
                             gt_instances, det_instances, gt_analysis, det_analysis)
     # Go over each image and draw appropriate
     print(args.img_set)

@@ -1,3 +1,10 @@
+# PDQ Evaluation
+
+This is a fork with some small changes from the original one, also assuming `cocoapi` is a sibling folder. 
+
+
+# Original README
+
 Overview
 ========
 This code enables the evaluation of detectors on Common Objects in Context (*COCO*) and 
