@@ -13,7 +13,7 @@ import sys
 import os.path as osp
 
 # Temp way to get access to COCO code for now
-sys.path.append('path/to/COCO/PythonAPI/')
+sys.path.append('/path/to/COCO/PythonAPI/')
 from pycocotools.coco import COCO
 
 
