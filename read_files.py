@@ -362,10 +362,27 @@ def convert_coco_det_to_rvc_det(det_filename, gt_filename, save_filename):
             box[2] += box[0]
             box[3] += box[1]
 
-            # Extract score of chosen class and distribute remaining probability across all others
-            label_probs = np.ones(len(class_list)) * ((1 - det['score'])/(len(class_list)-1))
-            label_probs[ann_idx_map[det['category_id']]] = det['score']
-            det_dict = {'bbox': box, 'covars': empty_covars, "label_probs": list(label_probs.astype(float))}
+            # Checking if the json has all the predicted scores
+            if 'all_scores' in det:
+                label_probs = det['all_scores']
+                if len(label_probs) != len(gt_img_ids):
+                    sys.exit(f'ERROR! "all_scores" array for image {img_id} has size {len(label_probs)} but should have size {len(gt_img_ids)}')
+            else:
+                # Extract score of chosen class and distribute remaining probability across all others
+                label_probs = np.ones(len(class_list)) * ((1 - det['score'])/(len(class_list)-1))
+                label_probs[ann_idx_map[det['category_id']]] = det['score']
+                label_probs = list(label_probs.astype(float))
+            
+            # Checking if the json has pre-calculated covariance matrices
+            if 'covar_xyxy' in det:
+                covars_vals = det['covar_xyxy']
+                covars_shape = np.array(covars_vals).shape
+                if covars_shape != (2, 2, 2):
+                    sys.exit(f'ERROR! "covar_xyxy" matrix for image {img_id} has shape {covars_shape} but should have shape (2, 2, 2)')
+            else:
+                covars_vals = empty_covars
+            
+            det_dict = {'bbox': box, 'covars': covars_vals, "label_probs": label_probs}
             img_rvc1_dets.append(det_dict)
 
         rvc1_dets.append(img_rvc1_dets)

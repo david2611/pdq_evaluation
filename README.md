@@ -130,6 +130,18 @@ file_convert_coco_to_rvc1.py
  where `<gt_json_file>` is the coco format ground-truth json filename, `det_json_file` is the coco format detection 
  json filename, and `output_file` is the json filename you will save your rvc1 formatted detections json file.
  
+ ### Important Notes ###
+ 
+ By default, coco json format does not come with the predicted scores for all the classes available, in which case the conversion script will just
+ extract the score of the chosen class and distribute remaining probability across all others classes. However, this will produce
+ incorrect measures of label quality because it is the probability estimated by the detector for the object's ground-truth class, which might not
+ correspond to the chosen class. To facilitate correct measurements, if a detection element in the coco json file (`det_json_file`) comes with a 
+ key `all_scores`, the conversion script will consider it as an array of all the scores, and use it instead of the default behaviour.
+ 
+ Also, by default, coco json format does not consider the existence of a covariance matrix which is needed for PDQ calculations. The conversion
+ script assigns by default a zero'ed covariance matrix, but if a detection element in the coco json file (`det_json_file`) comes with a 
+ key `covar_xyxy`, the conversion script will use that covariance matrix instead of the default one with zeros.
+ 
 evaluate.py
 -----------
  To perform full evaluation simply run:
