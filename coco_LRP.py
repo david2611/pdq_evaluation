@@ -7,7 +7,7 @@ from convert_to_coco_input import generate_coco_ground_truth_and_detections
 import sys
 
 # Temp way to get access to COCO code for now
-sys.path.append('./cocoapi/PythonAPI/')
+sys.path.append('path/to/COCO/PythonAPI/')
 from pycocotools.cocoevalLRP import COCOevalLRP
 from pycocotools.coco import COCO
 
