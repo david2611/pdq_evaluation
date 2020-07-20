@@ -365,8 +365,8 @@ def convert_coco_det_to_rvc_det(det_filename, gt_filename, save_filename):
             # Checking if the json has all the predicted scores
             if 'all_scores' in det:
                 label_probs = det['all_scores']
-                if len(label_probs) != len(gt_img_ids):
-                    sys.exit(f'ERROR! "all_scores" array for image {img_id} has size {len(label_probs)} but should have size {len(gt_img_ids)}')
+                if len(label_probs) != len(class_list):
+                    sys.exit(f'ERROR! "all_scores" array for image {img_id} has size {len(label_probs)} but should have size {len(class_list)}')
             else:
                 # Extract score of chosen class and distribute remaining probability across all others
                 label_probs = np.ones(len(class_list)) * ((1 - det['score'])/(len(class_list)-1))
@@ -374,7 +374,7 @@ def convert_coco_det_to_rvc_det(det_filename, gt_filename, save_filename):
                 label_probs = list(label_probs.astype(float))
             
             # Checking if the json has pre-calculated covariance matrices
-            if 'covar_xyxy' in det:
+            if 'covar_xyxy' in det and det['covar_xyxy'] is not None:
                 covars_vals = det['covar_xyxy']
                 covars_shape = np.array(covars_vals).shape
                 if covars_shape != (2, 2, 2):
