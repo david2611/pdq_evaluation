@@ -133,7 +133,7 @@ file_convert_coco_to_rvc1.py
  
  Also, by default, coco json format does not consider the existence of a covariance matrix which is needed for PDQ calculations. The conversion
  script assigns by default a zero'ed covariance matrix, but if a detection element in the coco json file (`det_json_file`) comes with a 
- key `covar_xyxy`, the conversion script will use that covariance matrix instead of the default one with zeros.
+ key `covars`, the conversion script will use that covariance matrix instead of the default one with zeros. Please refer to the previous section `RVC1 Detection Format` for further information on how `covars` should be formatted in the json file.
  
 evaluate.py
 -----------

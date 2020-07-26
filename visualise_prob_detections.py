@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import argparse
 import read_files
 import glob
+import sys
 import os
 import cv2
 import matplotlib.patches as patches

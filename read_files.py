@@ -374,11 +374,11 @@ def convert_coco_det_to_rvc_det(det_filename, gt_filename, save_filename):
                 label_probs = list(label_probs.astype(float))
             
             # Checking if the json has pre-calculated covariance matrices
-            if 'covar_xyxy' in det and det['covar_xyxy'] is not None:
-                covars_vals = det['covar_xyxy']
+            if 'covars' in det and det['covars'] is not None:
+                covars_vals = det['covars']
                 covars_shape = np.array(covars_vals).shape
                 if covars_shape != (2, 2, 2):
-                    sys.exit(f'ERROR! "covar_xyxy" matrix for image {img_id} has shape {covars_shape} but should have shape (2, 2, 2)')
+                    sys.exit(f'ERROR! "covars" matrix for image {img_id} has shape {covars_shape} but should have shape (2, 2, 2)')
             else:
                 covars_vals = empty_covars
             
