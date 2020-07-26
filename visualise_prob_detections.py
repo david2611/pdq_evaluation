@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import argparse
 import read_files
 import glob
+import sys
 import os
 import cv2
 import matplotlib.patches as patches
@@ -118,8 +119,13 @@ def main():
     det_instances, class_list = read_files.read_pbox_json(args.det_json,
                                                           override_cov=args.set_cov,
                                                           get_class_names=True)
+    
+    all_images = sorted(glob.glob(os.path.join(args.gt_img_folder, '*.'+args.img_type)))
+    if len(all_images) != len(det_instances):
+        sys.exit("ERROR! Ground truth images (--gt_img_folder) and det_instances are not the same length."
+                 "\ngt_img_folder: {0}, det_instances: {1}".format(len(all_images), len(det_instances)))
 
-    img_data_sequence = zip(sorted(glob.glob(os.path.join(args.gt_img_folder, '*.'+args.img_type))),
+    img_data_sequence = zip(all_images,
                             det_instances)
     # Go over each image and draw appropriate
     for img_name, img_dets in tqdm(img_data_sequence, total=len(det_instances), desc='image drawing'):

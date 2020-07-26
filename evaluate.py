@@ -162,11 +162,16 @@ def main():
     print("Extracting GT and Detections")
     param_sequence, len_sequences = gen_param_sequence()
     # Use same BBox definition as would be used for mAP
-    # Extract all moLRP statistics
-    if args.mAP_heatmap:
-        LRP_dict = coco_LRP(param_sequence, use_heatmap=True, full=True)
-    else:
-        LRP_dict = coco_LRP(param_sequence, use_heatmap=False, full=True)
+    # Extract all moLRP statistics        
+    try:
+        if args.mAP_heatmap:
+            LRP_dict = coco_LRP(param_sequence, use_heatmap=True, full=True)
+        else:
+            LRP_dict = coco_LRP(param_sequence, use_heatmap=False, full=True)
+    except Exception as e:
+        print('Error in coco_LRP, setting all as NaN')
+        print(e)
+        LRP_dict = {'moLRP': np.nan, 'moLRPLoc': np.nan, 'moLRPFP': np.nan, 'moLRPFN': np.nan}
 
     # Compile evaluation statistics into a single dictionary
     result = {"PDQ": pdq, "avg_pPDQ": avg_overall_quality, "avg_spatial": avg_spatial_quality,
