@@ -93,7 +93,7 @@ class PDQ(object):
         self._det_evals = []
         self._gt_evals = []
 
-    def score(self, pdq_param_lists):
+    def score(self, pdq_param_lists, num_workers=6):
         """
         Calculates the average probabilistic detection quality for a set of detections on
         a set of ground truth objects over a series of images.
@@ -106,7 +106,7 @@ class PDQ(object):
         """
         self.reset()
 
-        pool = Pool(processes=6)
+        pool = Pool(processes=num_workers)
 
         num_imgs = len(pdq_param_lists)
         for img_results in tqdm(pool.imap(self._get_image_evals, pdq_param_lists),
