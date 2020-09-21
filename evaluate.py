@@ -37,6 +37,7 @@ parser.add_argument('--greedy_mode', action='store_true', help='This flag indica
                                                                'in a greedy fashion(assigned in order of highest pPDQ)')
 parser.add_argument('--prob_seg', action='store_true', help='this flag indicates that the detections are probabilistic'
                                                             'segmentations and are formatted as such')
+parser.add_argument('--num_workers', default=6, type=int, help='Number of worker processes in CPU when calculating the PDQ score')
 args = parser.parse_args()
 
 # Define these before using this code
@@ -132,7 +133,7 @@ def main():
 
     # Get summary statistics (PDQ, avg_qualities)
     evaluator = PDQ(filter_gts=(args.test_set == 'rvc1'), segment_mode=args.segment_mode, greedy_mode=args.greedy_mode)
-    pdq = evaluator.score(param_sequence)
+    pdq = evaluator.score(param_sequence, num_workers=args.num_worker)
     TP, FP, FN = evaluator.get_assignment_counts()
     avg_spatial_quality = evaluator.get_avg_spatial_score()
     avg_label_quality = evaluator.get_avg_label_score()
