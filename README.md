@@ -1,18 +1,36 @@
-Overview
-========
-This code enables the evaluation of detectors on Common Objects in Context (*COCO*) and 
-Robotic Vision Challenge 1 (*RVC1*) data. Evaluation is performed using mean average precision (*mAP*) as implemented in
-the COCO challenge, mean optimal localisation recall precision (*moLRP*) based metrics, 
-and probabilistic detection quality (*PDQ*) as implemented (mostly) in the RVC1 CVPR2019 challenge.
+Probability-based Detection Quality (PDQ)
+=========================================
+This repository contains the implementation of the probability-based detection quality (PDQ) evaluation measure.
+This enables **quantitative** analysis of the **spatial and semantic uncertainties** output by a probabilistic object detecttion (PrOD) system.
+This repository provides tools for analysing PrOD detections and classical detections using mAP, moLRP, and PDQ (note that PDQ results will be low for a classical detector and mAP and moLRP scores will likely be low for PrOD detections).
+Evaluation can be performed both on COCO formatted data and on RVC1 (PrOD challenge) formatted data.
+The repository also provides visualization tools to enable fine-grained analysis of PDQ results as shown below.
 
-The code here, particularly for evaluating RVC1 results is based heavily on the RVC1 challenge code which can be found 
+![PrOD evaluation visualization image examples](docs/PDQ_Examples.jpg)
+
+The code here, particularly for evaluating RVC1 data is based heavily on the PrOD challenge code which can be found 
 here: https://github.com/jskinn/rvchallenge-evaluation
+
+Note that some extra funcitonality for PDQ outside of what is reported in the original paper and challenge is also provided such as evaluating results using the bounding boxes of the ground-truth segmentation masks, probabilistic segmentation evaluation, a greedy alternative to PDQ.
 
 For further details on the robotic vision challenges please see the following links for more details:
 
-Robotic Vision Challenges Homepage: http://roboticvisionchallenge.org/ 
-CVPR 2019 Challenge Page: https://competitions.codalab.org/competitions/20940
-Continuous Probabilistc Object Detection Challenge Page: https://competitions.codalab.org/competitions/21727
+- Robotic Vision Challenges Homepage: http://roboticvisionchallenge.org/
+- PrOD Main Challenge Page: https://competitions.codalab.org/competitions/20597
+- PrOD Continuous Challenge Page: https://competitions.codalab.org/competitions/20595 
+
+Citing PDQ
+==========
+If you are using PDQ in your research, please cite the paper below:
+```
+@inproceedings{hall2020probabilistic,
+  title={Probabilistic object detection: Definition and evaluation},
+  author={Hall, David and Dayoub, Feras and Skinner, John and Zhang, Haoyang and Miller, Dimity and Corke, Peter and Carneiro, Gustavo and Angelova, Anelia and S{\"u}nderhauf, Niko},
+  booktitle={The IEEE Winter Conference on Applications of Computer Vision},
+  pages={1031--1040},
+  year={2020}
+}
+```
 
 Setup
 =====
@@ -285,3 +303,9 @@ visualise_prob_detections.py
  
  New modes such as using probabilistic segmentation detections (`--prob_seg`) in the evaluation code are 
  **NOT** yet supported.
+
+ Acknowledgements
+ ================
+Development of the probability-based detection quality evaluation measure was directly supported by:
+
+![Australian Centre for Robotic Vision](./docs/acrv_logo_small.png)
