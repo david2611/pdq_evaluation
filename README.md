@@ -1,3 +1,5 @@
+[![QUT Centre for Robotics Open Source](https://github.com/qcr/qcr.github.io/raw/master/misc/badge.svg)](https://qcr.github.io)
+
 Probability-based Detection Quality (PDQ)
 =========================================
 This repository contains the implementation of the probability-based detection quality (PDQ) evaluation measure.
