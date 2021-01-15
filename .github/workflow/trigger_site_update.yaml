@@ -19,7 +19,7 @@ env:
   name: "Probability-based Detection Quality (PDQ)"
 
   # ID to be used throughout site, including in URL (OPTIONAL)
-  id: 'pdq'
+  # id: 'pdq'
 
   # Path of file to render for page content, relative to repo root (OPTIONAL)
   # content: 'README.md'
