@@ -133,7 +133,7 @@ def main():
 
     # Get summary statistics (PDQ, avg_qualities)
     evaluator = PDQ(filter_gts=(args.test_set == 'rvc1'), segment_mode=args.segment_mode, greedy_mode=args.greedy_mode)
-    pdq = evaluator.score(param_sequence, num_workers=args.num_worker)
+    pdq = evaluator.score(param_sequence, num_workers=args.num_workers)
     TP, FP, FN = evaluator.get_assignment_counts()
     avg_spatial_quality = evaluator.get_avg_spatial_score()
     avg_label_quality = evaluator.get_avg_label_score()
