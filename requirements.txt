@@ -1,4 +1,4 @@
-pip==19.2
+pip==21.1
 matplotlib==3.0.2
 numpy==1.16.1
 opencv-python==4.2.0.32
