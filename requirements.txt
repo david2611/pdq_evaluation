@@ -1,6 +1,6 @@
 pip==19.2
 matplotlib==3.0.2
-numpy==1.16.1
+numpy==1.22.0
 opencv-python==4.2.0.32
 scipy==1.2.1
 tqdm==4.31.1
